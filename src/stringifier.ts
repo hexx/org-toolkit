@@ -6,6 +6,7 @@ import type {
   Heading,
   List,
   ListItem,
+  LinkNode,
   Paragraph,
   Root,
   Table,
@@ -56,6 +57,8 @@ export function stringify(node: ASTNode): string {
     case "code":
     case "verbatim":
       return stringifyInlineNode(node);
+    case "link":
+      return stringifyLink(node);
     default:
       return assertNever(node);
   }
@@ -194,9 +197,19 @@ function stringifyInlineNode(node: InlineNode): string {
       return `=${node.value}=`;
     case "verbatim":
       return `~${node.value}~`;
+    case "link":
+      return stringifyLink(node);
     default:
       return assertNever(node);
   }
+}
+
+function stringifyLink(node: LinkNode): string {
+  if (node.description === undefined) {
+    return `[[${node.url}]]`;
+  }
+
+  return `[[${node.url}][${stringifyInline(node.description)}]]`;
 }
 
 function formatCheckbox(checkbox: NonNullable<ListItem["checkbox"]>): string {

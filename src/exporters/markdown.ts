@@ -7,6 +7,7 @@ import type {
   List,
   ListItem,
   ListKind,
+  LinkNode,
   Paragraph,
   Root,
   Table,
@@ -62,6 +63,8 @@ function render(node: ASTNode, context: RenderContext): string {
     case "code":
     case "verbatim":
       return renderInlineNode(node);
+    case "link":
+      return renderLink(node);
     default:
       return assertNever(node);
   }
@@ -188,9 +191,19 @@ function renderInlineNode(node: InlineNode): string {
     case "code":
     case "verbatim":
       return renderCodeSpan(node.value);
+    case "link":
+      return renderLink(node);
     default:
       return assertNever(node);
   }
+}
+
+function renderLink(node: LinkNode): string {
+  if (node.description === undefined) {
+    return `[${node.url}](${node.url})`;
+  }
+
+  return `[${renderInline(node.description)}](${node.url})`;
 }
 
 function renderCodeSpan(value: string): string {
