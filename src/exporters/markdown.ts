@@ -1,7 +1,10 @@
 import type {
   ASTNode,
   Block,
+  CommentNode,
   DocumentMetadata,
+  FootnoteDefinitionNode,
+  FootnoteReferenceNode,
   InlineNode,
   Heading,
   List,
@@ -53,6 +56,8 @@ function render(node: ASTNode, context: RenderContext): string {
       return renderListItem(node, context);
     case "block":
       return renderBlock(node);
+    case "comment":
+      return renderComment(node);
     case "table":
       return renderTable(node);
     case "table-row":
@@ -70,6 +75,10 @@ function render(node: ASTNode, context: RenderContext): string {
       return renderInlineNode(node);
     case "link":
       return renderLink(node);
+    case "footnote-reference":
+      return renderFootnoteReference(node);
+    case "footnote-definition":
+      return renderFootnoteDefinition(node);
     case "timestamp":
       return renderTimestamp(node);
     default:
@@ -94,6 +103,11 @@ function renderRoot(node: Root): string {
 
 function renderDocumentMetadata(node: DocumentMetadata): string {
   return `<!-- #+${node.key}: ${node.value} -->`;
+}
+
+function renderComment(node: CommentNode): string {
+  void node;
+  return "";
 }
 
 function renderFrontmatter(metadata: Readonly<Record<string, string>>): string {
@@ -178,6 +192,15 @@ function renderHeadingProperties(properties: Readonly<Record<string, string>>): 
 
   const lines = Object.entries(properties).map(([key, value]) => `:${key}: ${value}`.trimEnd());
   return `<!--\n${[":PROPERTIES:", ...lines, ":END:"].join("\n")}\n-->`;
+}
+
+function renderFootnoteReference(node: FootnoteReferenceNode): string {
+  return `[^${node.label}]`;
+}
+
+function renderFootnoteDefinition(node: FootnoteDefinitionNode): string {
+  const content = renderInline(node.children);
+  return content.length > 0 ? `[^${node.label}]: ${content}` : `[^${node.label}]:`;
 }
 
 function renderHeadingPlanning(node: Heading): ReadonlyArray<string> {
@@ -292,6 +315,8 @@ function renderInlineNode(node: InlineNode): string {
       return renderCodeSpan(node.value);
     case "link":
       return renderLink(node);
+    case "footnote-reference":
+      return renderFootnoteReference(node);
     case "timestamp":
       return renderTimestamp(node);
     default:

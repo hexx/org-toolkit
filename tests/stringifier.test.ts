@@ -132,6 +132,21 @@ describe("stringify", () => {
     expect(parse(stringify(ast))).toEqual(ast);
   });
 
+  it("stringifies comments and footnotes", () => {
+    const input = [
+      "# Comment about the doc",
+      "",
+      "See [fn:1] for details.",
+      "",
+      "[fn:1] Footnote *detail*.",
+    ].join("\n");
+
+    const ast = parse(input);
+
+    expect(stringify(ast)).toBe(input);
+    expect(parse(stringify(ast))).toEqual(ast);
+  });
+
   it("stringifies block nodes", () => {
     expect(
       stringify({

@@ -1,7 +1,10 @@
 import type {
   ASTNode,
   Block,
+  CommentNode,
   DocumentMetadata,
+  FootnoteDefinitionNode,
+  FootnoteReferenceNode,
   Heading,
   InlineNode,
   List,
@@ -72,10 +75,15 @@ function visitNode(node: ASTNode, visitor: Visitor, context: WalkContext): void 
       break;
     case "block":
     case "document-metadata":
+    case "comment":
     case "text":
     case "timestamp":
+    case "footnote-reference":
     case "code":
     case "verbatim":
+      break;
+    case "footnote-definition":
+      visitArray(node.children, visitor, node, context.depth + 1);
       break;
     case "table":
       visitArray(node.children, visitor, node, context.depth + 1);
@@ -178,6 +186,9 @@ function invokeVisitor(visitor: Visitor, node: ASTNode, context: WalkContext): v
     case "text":
       visitor.text?.(node, context);
       break;
+    case "comment":
+      visitor.comment?.(node, context);
+      break;
     case "bold":
       visitor.bold?.(node, context);
       break;
@@ -195,6 +206,12 @@ function invokeVisitor(visitor: Visitor, node: ASTNode, context: WalkContext): v
       break;
     case "link":
       visitor.link?.(node, context);
+      break;
+    case "footnote-reference":
+      visitor["footnote-reference"]?.(node, context);
+      break;
+    case "footnote-definition":
+      visitor["footnote-definition"]?.(node, context);
       break;
     case "strike-through":
       visitor["strike-through"]?.(node, context);
