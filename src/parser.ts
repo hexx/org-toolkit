@@ -9,6 +9,10 @@ import type {
   Position,
   Root,
   SourceRange,
+  Table,
+  TableCell,
+  TableRow,
+  TableRowKind,
   Text,
 } from "./ast.js";
 import { OrgParseError } from "./errors.js";
@@ -21,6 +25,10 @@ interface LineEntry {
 interface ParsedListItemLine {
   readonly kind: ListKind;
   readonly item: ListItem;
+}
+
+interface ParsedTableRowLine {
+  readonly row: TableRow;
 }
 
 const TODO_KEYWORDS = new Set([
@@ -47,10 +55,11 @@ const TODO_KEYWORDS = new Set([
 export function parse(text: string): Root {
   const lines = collectLineEntries(text);
   const metadata: DocumentMetadata[] = [];
-  const children: Array<Heading | Paragraph | List> = [];
+  const children: Array<Heading | Paragraph | List | Table> = [];
   let paragraphBuffer: LineEntry[] = [];
   let listBuffer: ListItem[] = [];
   let listKind: ListKind | null = null;
+  let tableBuffer: TableRow[] = [];
 
   const flushParagraph = (): void => {
     if (paragraphBuffer.length === 0) {
@@ -98,16 +107,36 @@ export function parse(text: string): Root {
     listKind = null;
   };
 
+  const flushTable = (): void => {
+    if (tableBuffer.length === 0) {
+      return;
+    }
+
+    const first = tableBuffer[0]!;
+    const last = tableBuffer[tableBuffer.length - 1]!;
+    children.push({
+      type: "table",
+      children: [...tableBuffer],
+      position: {
+        start: first.position.start,
+        end: last.position.end,
+      },
+    });
+    tableBuffer = [];
+  };
+
   for (const line of lines) {
     if (isBlankLine(line.text)) {
       flushParagraph();
       flushList();
+      flushTable();
       continue;
     }
 
     if (isMetadataLine(line.text)) {
       flushParagraph();
       flushList();
+      flushTable();
       metadata.push(parseMetadataLine(line));
       continue;
     }
@@ -116,13 +145,23 @@ export function parse(text: string): Root {
     if (heading !== null) {
       flushParagraph();
       flushList();
+      flushTable();
       children.push(heading);
+      continue;
+    }
+
+    const tableRowLine = parseTableRowLine(line);
+    if (tableRowLine !== null) {
+      flushParagraph();
+      flushList();
+      tableBuffer = [...tableBuffer, tableRowLine.row];
       continue;
     }
 
     const listItemLine = parseListItemLine(line);
     if (listItemLine !== null) {
       flushParagraph();
+      flushTable();
       if (listKind !== null && listKind !== listItemLine.kind) {
         flushList();
       }
@@ -132,12 +171,14 @@ export function parse(text: string): Root {
       continue;
     }
 
+    flushTable();
     flushList();
     paragraphBuffer = [...paragraphBuffer, line];
   }
 
   flushParagraph();
   flushList();
+  flushTable();
 
   const start = lines[0]?.position.start ?? createPosition(0, 1, 1);
   const end = lines[lines.length - 1]?.position.end ?? createPosition(0, 1, 1);
@@ -333,6 +374,54 @@ function parseListItemLine(line: LineEntry): ParsedListItemLine | null {
   };
 }
 
+function parseTableRowLine(line: LineEntry): ParsedTableRowLine | null {
+  const indentMatch = line.text.match(/^\s*/);
+  const indent = indentMatch?.[0].length ?? 0;
+  const content = line.text.slice(indent);
+  if (!content.startsWith("|")) {
+    return null;
+  }
+
+  const rowType: TableRowKind = isTableSeparatorLine(content) ? "separator" : "data";
+  if (rowType === "separator") {
+    return {
+      row: {
+        type: "table-row",
+        rowType,
+        children: [],
+        position: line.position,
+      },
+    };
+  }
+
+  const cells = splitTableCells(content).map((segment) => {
+    const trimmed = segment.raw.trim();
+    const trimmedStart = segment.raw.length - segment.raw.trimStart().length;
+    const cellOffset = indent + segment.start + trimmedStart;
+    const cellPosition = {
+      start: createOffsetPosition(line.position.start, cellOffset),
+      end: createOffsetPosition(line.position.start, cellOffset + trimmed.length),
+    };
+
+    const cell: TableCell = {
+      type: "table-cell",
+      value: trimmed,
+      position: cellPosition,
+    };
+
+    return cell;
+  });
+
+  return {
+    row: {
+      type: "table-row",
+      rowType,
+      children: cells,
+      position: line.position,
+    },
+  };
+}
+
 function splitTodoKeyword(content: string): {
   readonly todoKeyword?: string;
   readonly title: string;
@@ -393,16 +482,45 @@ function splitTrailingTags(content: string): {
   };
 }
 
+function splitTableCells(content: string): ReadonlyArray<{
+  readonly raw: string;
+  readonly start: number;
+}> {
+  const parts = content.split("|");
+  const segments: Array<{ readonly raw: string; readonly start: number }> = [];
+  let offset = 0;
+
+  for (let index = 0; index < parts.length; index += 1) {
+    const raw = parts[index] ?? "";
+    const start = offset;
+    offset += raw.length + 1;
+
+    const isOuterLeadingEmpty = index === 0 && content.startsWith("|");
+    const isOuterTrailingEmpty = index === parts.length - 1 && content.endsWith("|");
+    if (isOuterLeadingEmpty || isOuterTrailingEmpty) {
+      continue;
+    }
+
+    segments.push({
+      raw,
+      start,
+    });
+  }
+
+  return segments;
+}
+
+function isTableSeparatorLine(content: string): boolean {
+  const normalized = content.replace(/[ \t]/g, "");
+  return normalized.length > 0 && /^[|+\-=]+$/.test(normalized);
+}
+
 function isMetadataLine(line: string): boolean {
   return /^#\+[A-Za-z0-9_-]+:/.test(line);
 }
 
 function isBlankLine(line: string): boolean {
   return line.trim().length === 0;
-}
-
-function isWhitespace(char: string): boolean {
-  return char === " " || char === "\t";
 }
 
 function isValidTag(tag: string): boolean {

@@ -63,7 +63,7 @@ export interface NodeBase {
 export interface Root extends NodeBase {
   readonly type: "root";
   readonly metadata: ReadonlyArray<DocumentMetadata>;
-  readonly children: ReadonlyArray<Heading | Paragraph | List>;
+  readonly children: ReadonlyArray<Heading | Paragraph | List | Table>;
 }
 
 /**
@@ -213,6 +213,81 @@ export interface ListItem extends NodeBase {
   readonly marker: string;
   readonly checkbox: ListItemCheckboxState;
   readonly children: ReadonlyArray<Text | Paragraph | List>;
+}
+
+/**
+ * The kind of a table row.
+ *
+ * @example
+ * ```ts
+ * const rowType: TableRowKind = "data";
+ * ```
+ */
+export type TableRowKind = "data" | "separator";
+
+/**
+ * A table node that groups consecutive table rows.
+ *
+ * @example
+ * ```ts
+ * const table: Table = {
+ *   type: "table",
+ *   children: [],
+ *   position: {
+ *     start: { index: 0, line: 1, column: 1 },
+ *     end: { index: 0, line: 1, column: 1 },
+ *   },
+ * };
+ * ```
+ */
+export interface Table extends NodeBase {
+  readonly type: "table";
+  readonly children: ReadonlyArray<TableRow>;
+}
+
+/**
+ * A row inside an org-mode table.
+ *
+ * Data rows contain cell children. Separator rows are the horizontal rules
+ * used to split headers and body content.
+ *
+ * @example
+ * ```ts
+ * const row: TableRow = {
+ *   type: "table-row",
+ *   rowType: "data",
+ *   children: [],
+ *   position: {
+ *     start: { index: 0, line: 1, column: 1 },
+ *     end: { index: 0, line: 1, column: 1 },
+ *   },
+ * };
+ * ```
+ */
+export interface TableRow extends NodeBase {
+  readonly type: "table-row";
+  readonly rowType: TableRowKind;
+  readonly children: ReadonlyArray<TableCell>;
+}
+
+/**
+ * A single cell within a table row.
+ *
+ * @example
+ * ```ts
+ * const cell: TableCell = {
+ *   type: "table-cell",
+ *   value: "Alice",
+ *   position: {
+ *     start: { index: 0, line: 1, column: 1 },
+ *     end: { index: 5, line: 1, column: 6 },
+ *   },
+ * };
+ * ```
+ */
+export interface TableCell extends NodeBase {
+  readonly type: "table-cell";
+  readonly value: string;
 }
 
 /**
