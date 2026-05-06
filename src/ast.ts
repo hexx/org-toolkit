@@ -309,3 +309,25 @@ export interface Text extends NodeBase {
   readonly type: "text";
   readonly value: string;
 }
+
+/**
+ * Any AST node produced by the parser.
+ *
+ * @example
+ * ```ts
+ * function acceptsNode(node: ASTNode): void {
+ *   void node.type;
+ * }
+ * ```
+ */
+export type ASTNode =
+  | Root
+  | DocumentMetadata
+  | Heading
+  | Paragraph
+  | List
+  | ListItem
+  | Table
+  | TableRow
+  | TableCell
+  | Text;

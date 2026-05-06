@@ -18,7 +18,7 @@ describe("main", () => {
 
     expect(exitCode).toBe(1);
     expect(logSpy).toHaveBeenCalledWith(
-      "Usage: tsx src/cli.ts <path/to/file.org>",
+      "Usage: tsx src/cli.ts [--roundtrip] <path/to/file.org>",
     );
   });
 
@@ -52,5 +52,28 @@ describe("main", () => {
 
     expect(exitCode).toBe(1);
     expect(errorSpy).toHaveBeenCalled();
+  });
+
+  it("prints roundtrip text when requested", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "org-toolkit-"));
+    const filePath = join(directory, "sample.org");
+    const source = [
+      "* TODO Project Plan :work:urgent:",
+      "",
+      "- [ ] Research",
+      "- [X] Implement",
+      "",
+      "| Name  | Age | Role     |",
+      "|-----+---+--------|",
+      "| Alice | 24  | Engineer |",
+      "| Bob   | 30  | Designer |",
+    ].join("\n");
+    await writeFile(filePath, source, "utf8");
+
+    const exitCode = await main(["--roundtrip", filePath]);
+
+    expect(exitCode).toBe(0);
+    expect(errorSpy).not.toHaveBeenCalled();
+    expect(logSpy).toHaveBeenLastCalledWith(source);
   });
 });
