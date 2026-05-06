@@ -109,11 +109,38 @@ export type ListKind = "unordered" | "ordered";
 export type ListItemCheckboxState = "checked" | "unchecked" | null;
 
 /**
+ * A text node or formatting node that can appear inside block content.
+ *
+ * @example
+ * ```ts
+ * const inline: InlineNode = {
+ *   type: "bold",
+ *   children: [{ type: "text", value: "Important", position: {
+ *     start: { index: 0, line: 1, column: 1 },
+ *     end: { index: 9, line: 1, column: 10 },
+ *   }}],
+ *   position: {
+ *     start: { index: 0, line: 1, column: 1 },
+ *     end: { index: 11, line: 1, column: 12 },
+ *   },
+ * };
+ * ```
+ */
+export type InlineNode =
+  | TextNode
+  | BoldNode
+  | ItalicNode
+  | UnderlineNode
+  | CodeNode
+  | VerbatimNode
+  | StrikeThroughNode;
+
+/**
  * A heading node parsed from a line that starts with one or more `*`
  * characters.
  *
  * The parser keeps the heading extensible by storing the level, an optional
- * TODO keyword, the plain title, and trailing tags.
+ * TODO keyword, inline children, and trailing tags.
  *
  * @example
  * ```ts
@@ -121,9 +148,11 @@ export type ListItemCheckboxState = "checked" | "unchecked" | null;
  *   type: "heading",
  *   level: 1,
  *   todoKeyword: "TODO",
- *   title: "My First Heading",
  *   tags: ["work", "urgent"],
- *   children: [],
+ *   children: [{ type: "text", value: "My First Heading", position: {
+ *     start: { index: 7, line: 1, column: 8 },
+ *     end: { index: 23, line: 1, column: 24 },
+ *   }}],
  *   position: {
  *     start: { index: 0, line: 1, column: 1 },
  *     end: { index: 37, line: 1, column: 38 },
@@ -135,27 +164,22 @@ export interface Heading extends NodeBase {
   readonly type: "heading";
   readonly level: number;
   readonly todoKeyword?: string;
-  readonly title: string;
   readonly tags: ReadonlyArray<string>;
-  readonly children: ReadonlyArray<Paragraph>;
+  readonly children: ReadonlyArray<InlineNode>;
 }
 
 /**
- * A paragraph node that owns one or more text nodes.
+ * A paragraph node that owns one or more inline nodes.
  *
  * @example
  * ```ts
  * const paragraph: Paragraph = {
  *   type: "paragraph",
  *   children: [
- *     {
- *       type: "text",
- *       value: "Hello world",
- *       position: {
- *         start: { index: 0, line: 1, column: 1 },
- *         end: { index: 11, line: 1, column: 12 },
- *       },
- *     },
+ *     { type: "text", value: "Hello world", position: {
+ *       start: { index: 0, line: 1, column: 1 },
+ *       end: { index: 11, line: 1, column: 12 },
+ *     }},
  *   ],
  *   position: {
  *     start: { index: 0, line: 1, column: 1 },
@@ -166,7 +190,7 @@ export interface Heading extends NodeBase {
  */
 export interface Paragraph extends NodeBase {
   readonly type: "paragraph";
-  readonly children: ReadonlyArray<Text>;
+  readonly children: ReadonlyArray<InlineNode>;
 }
 
 /**
@@ -192,7 +216,7 @@ export interface List extends NodeBase {
 }
 
 /**
- * A single list item with its marker, checkbox state, and child nodes.
+ * A single list item with its marker, checkbox state, and inline children.
  *
  * @example
  * ```ts
@@ -200,7 +224,10 @@ export interface List extends NodeBase {
  *   type: "list-item",
  *   marker: "-",
  *   checkbox: "unchecked",
- *   children: [],
+ *   children: [{ type: "text", value: "Task", position: {
+ *     start: { index: 2, line: 1, column: 3 },
+ *     end: { index: 6, line: 1, column: 7 },
+ *   }}],
  *   position: {
  *     start: { index: 0, line: 1, column: 1 },
  *     end: { index: 8, line: 1, column: 9 },
@@ -212,7 +239,7 @@ export interface ListItem extends NodeBase {
   readonly type: "list-item";
   readonly marker: string;
   readonly checkbox: ListItemCheckboxState;
-  readonly children: ReadonlyArray<Text | Paragraph | List>;
+  readonly children: ReadonlyArray<InlineNode>;
 }
 
 /**
@@ -277,7 +304,10 @@ export interface TableRow extends NodeBase {
  * ```ts
  * const cell: TableCell = {
  *   type: "table-cell",
- *   value: "Alice",
+ *   children: [{ type: "text", value: "Alice", position: {
+ *     start: { index: 0, line: 1, column: 1 },
+ *     end: { index: 5, line: 1, column: 6 },
+ *   }}],
  *   position: {
  *     start: { index: 0, line: 1, column: 1 },
  *     end: { index: 5, line: 1, column: 6 },
@@ -287,11 +317,11 @@ export interface TableRow extends NodeBase {
  */
 export interface TableCell extends NodeBase {
   readonly type: "table-cell";
-  readonly value: string;
+  readonly children: ReadonlyArray<InlineNode>;
 }
 
 /**
- * A leaf text node used inside paragraphs.
+ * A plain text node used inside inline content.
  *
  * @example
  * ```ts
@@ -305,10 +335,63 @@ export interface TableCell extends NodeBase {
  * };
  * ```
  */
-export interface Text extends NodeBase {
+export interface TextNode extends NodeBase {
   readonly type: "text";
   readonly value: string;
 }
+
+/**
+ * Bold inline text.
+ */
+export interface BoldNode extends NodeBase {
+  readonly type: "bold";
+  readonly children: ReadonlyArray<InlineNode>;
+}
+
+/**
+ * Italic inline text.
+ */
+export interface ItalicNode extends NodeBase {
+  readonly type: "italic";
+  readonly children: ReadonlyArray<InlineNode>;
+}
+
+/**
+ * Underlined inline text.
+ */
+export interface UnderlineNode extends NodeBase {
+  readonly type: "underline";
+  readonly children: ReadonlyArray<InlineNode>;
+}
+
+/**
+ * Inline code surrounded by `=` in org-mode.
+ */
+export interface CodeNode extends NodeBase {
+  readonly type: "code";
+  readonly value: string;
+}
+
+/**
+ * Verbatim inline text surrounded by `~` in org-mode.
+ */
+export interface VerbatimNode extends NodeBase {
+  readonly type: "verbatim";
+  readonly value: string;
+}
+
+/**
+ * Strikethrough inline text.
+ */
+export interface StrikeThroughNode extends NodeBase {
+  readonly type: "strike-through";
+  readonly children: ReadonlyArray<InlineNode>;
+}
+
+/**
+ * Backwards-compatible alias for plain text inline nodes.
+ */
+export type Text = TextNode;
 
 /**
  * Any AST node produced by the parser.
@@ -330,4 +413,4 @@ export type ASTNode =
   | Table
   | TableRow
   | TableCell
-  | Text;
+  | InlineNode;

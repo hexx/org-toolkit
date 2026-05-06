@@ -13,9 +13,17 @@ describe("parse", () => {
           type: "heading",
           level: 1,
           todoKeyword: "TODO",
-          title: "My First Heading",
           tags: ["work", "urgent"],
-          children: [],
+          children: [
+            {
+              type: "text",
+              value: "My First Heading",
+              position: {
+                start: { index: 7, line: 1, column: 8 },
+                end: { index: 23, line: 1, column: 24 },
+              },
+            },
+          ],
           position: {
             start: { index: 0, line: 1, column: 1 },
             end: { index: input.length, line: 1, column: input.length + 1 },
@@ -58,6 +66,41 @@ describe("parse", () => {
               value: "Item B",
             },
           ],
+        },
+      ],
+    });
+  });
+
+  it("parses inline markup inside paragraphs", () => {
+    const ast = parse("Plain *bold* /italic/ =code= ~verb~ +strike+ _under_");
+
+    expect(ast.children).toHaveLength(1);
+    expect(ast.children[0]).toMatchObject({
+      type: "paragraph",
+      children: [
+        { type: "text", value: "Plain " },
+        {
+          type: "bold",
+          children: [{ type: "text", value: "bold" }],
+        },
+        { type: "text", value: " " },
+        {
+          type: "italic",
+          children: [{ type: "text", value: "italic" }],
+        },
+        { type: "text", value: " " },
+        { type: "code", value: "code" },
+        { type: "text", value: " " },
+        { type: "verbatim", value: "verb" },
+        { type: "text", value: " " },
+        {
+          type: "strike-through",
+          children: [{ type: "text", value: "strike" }],
+        },
+        { type: "text", value: " " },
+        {
+          type: "underline",
+          children: [{ type: "text", value: "under" }],
         },
       ],
     });
@@ -144,9 +187,9 @@ describe("parse", () => {
           type: "table-row",
           rowType: "data",
           children: [
-            { type: "table-cell", value: "Name" },
-            { type: "table-cell", value: "Age" },
-            { type: "table-cell", value: "Role" },
+            { type: "table-cell", children: [{ type: "text", value: "Name" }] },
+            { type: "table-cell", children: [{ type: "text", value: "Age" }] },
+            { type: "table-cell", children: [{ type: "text", value: "Role" }] },
           ],
         },
         {
@@ -158,18 +201,18 @@ describe("parse", () => {
           type: "table-row",
           rowType: "data",
           children: [
-            { type: "table-cell", value: "Alice" },
-            { type: "table-cell", value: "24" },
-            { type: "table-cell", value: "Engineer" },
+            { type: "table-cell", children: [{ type: "text", value: "Alice" }] },
+            { type: "table-cell", children: [{ type: "text", value: "24" }] },
+            { type: "table-cell", children: [{ type: "text", value: "Engineer" }] },
           ],
         },
         {
           type: "table-row",
           rowType: "data",
           children: [
-            { type: "table-cell", value: "Bob" },
-            { type: "table-cell", value: "30" },
-            { type: "table-cell", value: "Designer" },
+            { type: "table-cell", children: [{ type: "text", value: "Bob" }] },
+            { type: "table-cell", children: [{ type: "text", value: "30" }] },
+            { type: "table-cell", children: [{ type: "text", value: "Designer" }] },
           ],
         },
       ],

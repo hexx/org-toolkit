@@ -9,9 +9,10 @@ describe("toMarkdown", () => {
         type: "heading",
         level: 2,
         todoKeyword: "TODO",
-        title: "Plan",
         tags: [],
-        children: [],
+        children: [
+          { type: "text", value: "Plan", position: { start: { index: 0, line: 1, column: 1 }, end: { index: 4, line: 1, column: 5 } } },
+        ],
         position: {
           start: { index: 0, line: 1, column: 1 },
           end: { index: 0, line: 1, column: 1 },
@@ -22,10 +23,10 @@ describe("toMarkdown", () => {
 
   it("converts parsed org content to GFM", () => {
     const input = [
-      "* TODO Project Plan",
+      "* TODO Project *Plan*",
       "",
-      "- [ ] Research",
-      "- [X] Implement",
+      "- [ ] Research /background/",
+      "- [X] Implement =core=",
       "",
       "| Name  | Age | Role     |",
       "|-----+---+--------|",
@@ -35,10 +36,10 @@ describe("toMarkdown", () => {
 
     expect(toMarkdown(parse(input))).toBe(
       [
-        "# TODO Project Plan",
+        "# TODO Project **Plan**",
         "",
-        "- [ ] Research",
-        "- [x] Implement",
+        "- [ ] Research *background*",
+        "- [x] Implement `core`",
         "",
         "| Name | Age | Role |",
         "|---|---|---|",

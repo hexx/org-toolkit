@@ -1,6 +1,7 @@
 import type {
   ASTNode,
   DocumentMetadata,
+  InlineNode,
   Heading,
   List,
   ListItem,
@@ -9,7 +10,7 @@ import type {
   Table,
   TableCell,
   TableRow,
-  Text,
+  TextNode,
 } from "./ast.js";
 
 /**
@@ -45,6 +46,13 @@ export function stringify(node: ASTNode): string {
       return stringifyTableCell(node);
     case "text":
       return stringifyText(node);
+    case "bold":
+    case "italic":
+    case "underline":
+    case "strike-through":
+    case "code":
+    case "verbatim":
+      return stringifyInlineNode(node);
     default:
       return assertNever(node);
   }
@@ -76,8 +84,9 @@ function stringifyHeading(node: Heading): string {
     parts.push(node.todoKeyword);
   }
 
-  if (node.title.length > 0) {
-    parts.push(node.title);
+  const content = stringifyInline(node.children);
+  if (content.length > 0) {
+    parts.push(content);
   }
 
   let line = parts.join(" ");
@@ -89,7 +98,7 @@ function stringifyHeading(node: Heading): string {
 }
 
 function stringifyParagraph(node: Paragraph): string {
-  return node.children.map(stringify).join("");
+  return stringifyInline(node.children);
 }
 
 function stringifyList(node: List): string {
@@ -98,22 +107,8 @@ function stringifyList(node: List): string {
 
 function stringifyListItem(node: ListItem): string {
   const prefix = node.checkbox === null ? node.marker : `${node.marker} ${formatCheckbox(node.checkbox)}`;
-  const content = stringifyListItemChildren(node.children);
+  const content = stringifyInline(node.children);
   return content.length > 0 ? `${prefix} ${content}` : prefix;
-}
-
-function stringifyListItemChildren(
-  children: ReadonlyArray<Paragraph | List | Text>,
-): string {
-  if (children.length === 0) {
-    return "";
-  }
-
-  if (children.every((child) => child.type === "text")) {
-    return children.map(stringify).join("");
-  }
-
-  return children.map(stringify).join("\n");
 }
 
 function stringifyTable(node: Table): string {
@@ -127,7 +122,7 @@ function stringifyTableRow(node: TableRow, widths?: ReadonlyArray<number>): stri
       widths !== undefined && widths.length > 0
         ? widths
         : node.children.length > 0
-          ? node.children.map((cell) => Math.max(3, cell.value.length))
+          ? node.children.map((cell) => Math.max(3, stringifyTableCell(cell).length))
           : [3];
     return `|${separatorWidths.map((width) => "-".repeat(Math.max(3, width))).join("+")}|`;
   }
@@ -135,21 +130,22 @@ function stringifyTableRow(node: TableRow, widths?: ReadonlyArray<number>): stri
   const rowWidths =
     widths !== undefined && widths.length > 0
       ? widths
-      : node.children.map((cell) => Math.max(3, cell.value.length));
+      : node.children.map((cell) => Math.max(3, stringifyTableCell(cell).length));
 
   const cells = node.children.map((cell, index) => {
-    const width = rowWidths[index] ?? Math.max(3, cell.value.length);
-    return ` ${cell.value.padEnd(width)} `;
+    const value = stringifyTableCell(cell);
+    const width = rowWidths[index] ?? Math.max(3, value.length);
+    return ` ${value.padEnd(width)} `;
   });
 
   return `|${cells.join("|")}|`;
 }
 
 function stringifyTableCell(node: TableCell): string {
-  return node.value;
+  return stringifyInline(node.children);
 }
 
-function stringifyText(node: Text): string {
+function stringifyText(node: TextNode): string {
   return node.value;
 }
 
@@ -162,11 +158,36 @@ function calculateTableWidths(rows: ReadonlyArray<TableRow>): ReadonlyArray<numb
     }
 
     row.children.forEach((cell, index) => {
-      widths[index] = Math.max(widths[index] ?? 0, cell.value.length);
+      widths[index] = Math.max(widths[index] ?? 0, stringifyTableCell(cell).length);
     });
   }
 
   return widths;
+}
+
+function stringifyInline(nodes: ReadonlyArray<InlineNode>): string {
+  return nodes.map((node) => stringify(node)).join("");
+}
+
+function stringifyInlineNode(node: InlineNode): string {
+  switch (node.type) {
+    case "text":
+      return node.value;
+    case "bold":
+      return `*${stringifyInline(node.children)}*`;
+    case "italic":
+      return `/${stringifyInline(node.children)}/`;
+    case "underline":
+      return `_${stringifyInline(node.children)}_`;
+    case "strike-through":
+      return `+${stringifyInline(node.children)}+`;
+    case "code":
+      return `=${node.value}=`;
+    case "verbatim":
+      return `~${node.value}~`;
+    default:
+      return assertNever(node);
+  }
 }
 
 function formatCheckbox(checkbox: NonNullable<ListItem["checkbox"]>): string {

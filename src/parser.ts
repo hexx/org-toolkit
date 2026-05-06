@@ -1,5 +1,6 @@
 import type {
   DocumentMetadata,
+  InlineNode,
   Heading,
   List,
   ListItem,
@@ -13,7 +14,6 @@ import type {
   TableCell,
   TableRow,
   TableRowKind,
-  Text,
 } from "./ast.js";
 import { OrgParseError } from "./errors.js";
 
@@ -43,8 +43,9 @@ const TODO_KEYWORDS = new Set([
 /**
  * Parse an org-mode document into a minimal AST.
  *
- * This first-pass parser understands document metadata, headings, and
- * paragraphs while preserving source positions for every node.
+ * This first-pass parser understands document metadata, headings, paragraphs,
+ * lists, tables, and basic inline markup while preserving source positions for
+ * every node.
  *
  * @example
  * ```ts
@@ -73,15 +74,10 @@ export function parse(text: string): Root {
       start: first.position.start,
       end: last.position.end,
     };
-    const textNode: Text = {
-      type: "text",
-      value,
-      position: paragraphPosition,
-    };
 
     children.push({
       type: "paragraph",
-      children: [textNode],
+      children: parseInline(value, paragraphPosition.start),
       position: paragraphPosition,
     });
     paragraphBuffer = [];
@@ -279,7 +275,7 @@ function parseMetadataLine(line: LineEntry): DocumentMetadata {
 }
 
 function parseHeadingLine(line: LineEntry): Heading | null {
-  const match = line.text.match(/^(\*+)[ \t]*(.*)$/);
+  const match = line.text.match(/^(\*+)([ \t]*)(.*)$/);
   if (match === null) {
     return null;
   }
@@ -289,20 +285,25 @@ function parseHeadingLine(line: LineEntry): Heading | null {
     return null;
   }
 
+  const spaces = match[2] ?? "";
   const level = stars.length;
-  const content = match[2] ?? "";
-  const { todoKeyword, title: titleWithPossibleTags } =
+  const content = match[3] ?? "";
+  const { todoKeyword, rest, restOffset } =
     splitTodoKeyword(content);
-  const { title, tags } = splitTrailingTags(titleWithPossibleTags);
+  const { title, tags } = splitTrailingTags(rest);
+  const titlePosition =
+    title.length === 0
+      ? line.position.start
+      : createOffsetPosition(line.position.start, stars.length + spaces.length + restOffset);
+  const children = parseInline(title, titlePosition);
 
   if (todoKeyword !== undefined) {
     return {
       type: "heading",
       level,
       todoKeyword,
-      title,
       tags,
-      children: [],
+      children,
       position: line.position,
     };
   }
@@ -310,9 +311,8 @@ function parseHeadingLine(line: LineEntry): Heading | null {
   return {
     type: "heading",
     level,
-    title,
     tags,
-    children: [],
+    children,
     position: line.position,
   };
 }
@@ -349,18 +349,8 @@ function parseListItemLine(line: LineEntry): ParsedListItemLine | null {
 
   const contentOffset =
     leadingWhitespace.length + marker.length + separator.length + checkboxLength;
-  const children: Array<Text | Paragraph | List> = [];
-
-  if (content.length > 0) {
-    children.push({
-      type: "text",
-      value: content,
-      position: {
-        start: createOffsetPosition(line.position.start, contentOffset),
-        end: createOffsetPosition(line.position.start, contentOffset + content.length),
-      },
-    });
-  }
+  const contentPosition = createOffsetPosition(line.position.start, contentOffset);
+  const children = parseInline(content, contentPosition);
 
   return {
     kind,
@@ -405,7 +395,7 @@ function parseTableRowLine(line: LineEntry): ParsedTableRowLine | null {
 
     const cell: TableCell = {
       type: "table-cell",
-      value: trimmed,
+      children: parseInline(trimmed, cellPosition.start),
       position: cellPosition,
     };
 
@@ -424,26 +414,30 @@ function parseTableRowLine(line: LineEntry): ParsedTableRowLine | null {
 
 function splitTodoKeyword(content: string): {
   readonly todoKeyword?: string;
-  readonly title: string;
+  readonly rest: string;
+  readonly restOffset: number;
 } {
-  const trimmed = content.trim();
+  const trimmed = content.trimStart();
+  const leadingWhitespace = content.length - trimmed.length;
   if (trimmed.length === 0) {
-    return { title: "" };
+    return { rest: "", restOffset: leadingWhitespace };
   }
 
   const firstWhitespace = trimmed.search(/\s/);
   const keyword =
     firstWhitespace === -1 ? trimmed : trimmed.slice(0, firstWhitespace);
   if (!TODO_KEYWORDS.has(keyword)) {
-    return { title: trimmed };
+    return { rest: trimmed, restOffset: leadingWhitespace };
   }
 
-  const title =
+  const rest =
     firstWhitespace === -1 ? "" : trimmed.slice(firstWhitespace).trimStart();
+  const restOffset = leadingWhitespace + (trimmed.length - rest.length);
 
   return {
     todoKeyword: keyword,
-    title,
+    rest,
+    restOffset,
   };
 }
 
@@ -541,4 +535,120 @@ function createOffsetPosition(position: Position, offset: number): Position {
     line: position.line,
     column: position.column + offset,
   };
+}
+
+function parseInline(text: string, startPosition: Position): ReadonlyArray<InlineNode> {
+  const nodes: InlineNode[] = [];
+  let index = 0;
+  let textStart = 0;
+
+  const flushText = (endIndex: number): void => {
+    if (endIndex <= textStart) {
+      return;
+    }
+
+    nodes.push({
+      type: "text",
+      value: text.slice(textStart, endIndex),
+      position: {
+        start: createOffsetPosition(startPosition, textStart),
+        end: createOffsetPosition(startPosition, endIndex),
+      },
+    });
+  };
+
+  while (index < text.length) {
+    const marker = text[index];
+    if (marker === undefined || !isInlineDelimiter(marker)) {
+      index += 1;
+      continue;
+    }
+
+    const closingIndex = text.indexOf(marker, index + 1);
+    if (closingIndex === -1) {
+      index += 1;
+      continue;
+    }
+
+    flushText(index);
+
+    const nodeStart = createOffsetPosition(startPosition, index);
+    const nodeEnd = createOffsetPosition(startPosition, closingIndex + 1);
+    const innerText = text.slice(index + 1, closingIndex);
+
+    switch (marker) {
+      case "*":
+        nodes.push({
+          type: "bold",
+          children: parseInline(innerText, createOffsetPosition(startPosition, index + 1)),
+          position: {
+            start: nodeStart,
+            end: nodeEnd,
+          },
+        });
+        break;
+      case "/":
+        nodes.push({
+          type: "italic",
+          children: parseInline(innerText, createOffsetPosition(startPosition, index + 1)),
+          position: {
+            start: nodeStart,
+            end: nodeEnd,
+          },
+        });
+        break;
+      case "_":
+        nodes.push({
+          type: "underline",
+          children: parseInline(innerText, createOffsetPosition(startPosition, index + 1)),
+          position: {
+            start: nodeStart,
+            end: nodeEnd,
+          },
+        });
+        break;
+      case "+":
+        nodes.push({
+          type: "strike-through",
+          children: parseInline(innerText, createOffsetPosition(startPosition, index + 1)),
+          position: {
+            start: nodeStart,
+            end: nodeEnd,
+          },
+        });
+        break;
+      case "=":
+        nodes.push({
+          type: "code",
+          value: innerText,
+          position: {
+            start: nodeStart,
+            end: nodeEnd,
+          },
+        });
+        break;
+      case "~":
+        nodes.push({
+          type: "verbatim",
+          value: innerText,
+          position: {
+            start: nodeStart,
+            end: nodeEnd,
+          },
+        });
+        break;
+      default:
+        break;
+    }
+
+    index = closingIndex + 1;
+    textStart = index;
+  }
+
+  flushText(text.length);
+  return nodes;
+}
+
+function isInlineDelimiter(character: string): boolean {
+  return character === "*" || character === "/" || character === "_" || character === "+" || character === "=" || character === "~";
 }

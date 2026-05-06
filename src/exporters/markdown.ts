@@ -1,6 +1,7 @@
 import type {
   ASTNode,
   DocumentMetadata,
+  InlineNode,
   Heading,
   List,
   ListItem,
@@ -10,7 +11,7 @@ import type {
   Table,
   TableCell,
   TableRow,
-  Text,
+  TextNode,
 } from "../ast.js";
 
 interface RenderContext {
@@ -51,6 +52,13 @@ function render(node: ASTNode, context: RenderContext): string {
       return renderTableCell(node);
     case "text":
       return renderText(node);
+    case "bold":
+    case "italic":
+    case "underline":
+    case "strike-through":
+    case "code":
+    case "verbatim":
+      return renderInlineNode(node);
     default:
       return assertNever(node);
   }
@@ -70,7 +78,8 @@ function renderDocumentMetadata(node: DocumentMetadata): string {
 }
 
 function renderHeading(node: Heading): string {
-  const prefix = `${"#".repeat(node.level)} ${node.todoKeyword ? `${node.todoKeyword} ` : ""}${node.title}`.trimEnd();
+  const content = renderInline(node.children);
+  const prefix = `${"#".repeat(node.level)} ${node.todoKeyword ? `${node.todoKeyword} ` : ""}${content}`.trimEnd();
   if (node.tags.length === 0) {
     return prefix;
   }
@@ -79,7 +88,8 @@ function renderHeading(node: Heading): string {
 }
 
 function renderParagraph(node: Paragraph, context: RenderContext): string {
-  return node.children.map((child) => render(child, context)).join("");
+  void context;
+  return renderInline(node.children);
 }
 
 function renderList(node: List): string {
@@ -95,20 +105,13 @@ function renderListItem(node: ListItem, context: RenderContext): string {
         : node.marker;
   const checkbox =
     node.checkbox === null ? "" : ` ${node.checkbox === "checked" ? "[x]" : "[ ]"}`;
-  const content = renderListItemChildren(node.children, context).trim();
+  const content = renderInline(node.children).trim();
 
   if (content.length === 0) {
     return `${marker}${checkbox}`.trimEnd();
   }
 
   return `${marker}${checkbox} ${content}`;
-}
-
-function renderListItemChildren(
-  children: ReadonlyArray<Paragraph | List | Text>,
-  context: RenderContext,
-): string {
-  return children.map((child) => render(child, context)).join("\n");
 }
 
 function renderTable(node: Table): string {
@@ -135,11 +138,45 @@ function renderTableRow(node: TableRow, columnCount?: number): string {
 }
 
 function renderTableCell(node: TableCell): string {
-  return node.value.trim();
+  return renderInline(node.children).trim();
 }
 
-function renderText(node: Text): string {
+function renderText(node: TextNode): string {
   return node.value;
+}
+
+function renderInline(nodes: ReadonlyArray<InlineNode>): string {
+  return nodes.map((node) => render(node, {})).join("");
+}
+
+function renderInlineNode(node: InlineNode): string {
+  switch (node.type) {
+    case "text":
+      return node.value;
+    case "bold":
+      return `**${renderInline(node.children)}**`;
+    case "italic":
+      return `*${renderInline(node.children)}*`;
+    case "underline":
+      return `<u>${renderInline(node.children)}</u>`;
+    case "strike-through":
+      return `~~${renderInline(node.children)}~~`;
+    case "code":
+    case "verbatim":
+      return renderCodeSpan(node.value);
+    default:
+      return assertNever(node);
+  }
+}
+
+function renderCodeSpan(value: string): string {
+  const runs = value.match(/`+/g);
+  const fenceLength = (runs?.reduce((max, run) => Math.max(max, run.length), 0) ?? 0) + 1;
+  const fence = "`".repeat(fenceLength);
+  const needsPadding =
+    value.startsWith(" ") || value.endsWith(" ") || value.startsWith("`") || value.endsWith("`");
+  const content = needsPadding ? ` ${value} ` : value;
+  return `${fence}${content}${fence}`;
 }
 
 function assertNever(value: never): never {

@@ -1,7 +1,11 @@
 export type {
   ASTNode,
+  BoldNode,
+  CodeNode,
   DocumentMetadata,
+  InlineNode,
   Heading,
+  ItalicNode,
   List,
   ListItem,
   ListItemCheckboxState,
@@ -14,7 +18,11 @@ export type {
   TableRowKind,
   Root,
   SourceRange,
+  StrikeThroughNode,
   Text,
+  TextNode,
+  UnderlineNode,
+  VerbatimNode,
 } from "./ast.js";
 export { OrgParseError } from "./errors.js";
 export { Parser } from "./parser.js";

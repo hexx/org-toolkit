@@ -40,8 +40,8 @@ describe("main", () => {
         {
           type: "heading",
           todoKeyword: "TODO",
-          title: "Sample Heading",
           tags: ["work"],
+          children: [{ type: "text", value: "Sample Heading" }],
         },
       ],
     });
@@ -58,10 +58,10 @@ describe("main", () => {
     const directory = await mkdtemp(join(tmpdir(), "org-toolkit-"));
     const filePath = join(directory, "sample.org");
     const source = [
-      "* TODO Project Plan :work:urgent:",
+      "* TODO Project *Plan* :work:urgent:",
       "",
-      "- [ ] Research",
-      "- [X] Implement",
+      "- [ ] Research /background/",
+      "- [X] Implement =core=",
       "",
       "| Name  | Age | Role     |",
       "|-----+---+--------|",
@@ -81,10 +81,10 @@ describe("main", () => {
     const directory = await mkdtemp(join(tmpdir(), "org-toolkit-"));
     const filePath = join(directory, "sample.org");
     const source = [
-      "* TODO Project Plan",
+      "* TODO Project *Plan*",
       "",
-      "- [ ] Research",
-      "- [X] Implement",
+      "- [ ] Research /background/",
+      "- [X] Implement =core=",
     ].join("\n");
     await writeFile(filePath, source, "utf8");
 
@@ -94,10 +94,10 @@ describe("main", () => {
     expect(errorSpy).not.toHaveBeenCalled();
     expect(logSpy).toHaveBeenLastCalledWith(
       [
-        "# TODO Project Plan",
+        "# TODO Project **Plan**",
         "",
-        "- [ ] Research",
-        "- [x] Implement",
+        "- [ ] Research *background*",
+        "- [x] Implement `core`",
       ].join("\n"),
     );
   });
