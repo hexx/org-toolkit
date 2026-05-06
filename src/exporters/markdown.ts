@@ -72,7 +72,7 @@ function render(node: ASTNode, context: RenderContext): string {
 
 function renderRoot(node: Root): string {
   const parts = [
-    ...node.metadata.map((metadata) => renderDocumentMetadata(metadata)),
+    renderFrontmatter(node.metadata),
     ...node.children.map((child) => render(child, {})),
   ].filter((part) => part.length > 0);
 
@@ -81,6 +81,16 @@ function renderRoot(node: Root): string {
 
 function renderDocumentMetadata(node: DocumentMetadata): string {
   return `<!-- #+${node.key}: ${node.value} -->`;
+}
+
+function renderFrontmatter(metadata: Readonly<Record<string, string>>): string {
+  const entries = Object.entries(metadata);
+  if (entries.length === 0) {
+    return "";
+  }
+
+  const lines = entries.map(([key, value]) => `${key.toLowerCase()}: ${value}`);
+  return [`---`, ...lines, `---`].join("\n");
 }
 
 function renderHeading(node: Heading): string {

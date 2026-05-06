@@ -65,7 +65,7 @@ export function stringify(node: ASTNode): string {
 }
 
 function stringifyRoot(node: Root): string {
-  const metadata = node.metadata.map(stringifyDocumentMetadata);
+  const metadata = Object.entries(node.metadata).map(([key, value]) => `#+${key}: ${value}`.trimEnd());
   const children = node.children.map(stringify).filter((value) => value.length > 0);
 
   if (metadata.length === 0) {

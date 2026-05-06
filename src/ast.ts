@@ -51,7 +51,7 @@ export interface NodeBase {
  * ```ts
  * const root: Root = {
  *   type: "root",
- *   metadata: [],
+ *   metadata: { TITLE: "My Note" },
  *   children: [],
  *   position: {
  *     start: { index: 0, line: 1, column: 1 },
@@ -62,7 +62,7 @@ export interface NodeBase {
  */
 export interface Root extends NodeBase {
   readonly type: "root";
-  readonly metadata: ReadonlyArray<DocumentMetadata>;
+  readonly metadata: Readonly<Record<string, string>>;
   readonly children: ReadonlyArray<Heading | Paragraph | List | Block | Table>;
 }
 

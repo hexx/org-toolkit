@@ -25,7 +25,7 @@ describe("main", () => {
   it("prints AST JSON for an org file", async () => {
     const directory = await mkdtemp(join(tmpdir(), "org-toolkit-"));
     const filePath = join(directory, "sample.org");
-    await writeFile(filePath, "* TODO Sample Heading :work:\n", "utf8");
+    await writeFile(filePath, "#+TITLE: Sample Document\n* TODO Sample Heading :work:\n", "utf8");
 
     const exitCode = await main([filePath]);
 
@@ -36,6 +36,9 @@ describe("main", () => {
     expect(typeof output).toBe("string");
     expect(JSON.parse(output as string)).toMatchObject({
       type: "root",
+      metadata: {
+        TITLE: "Sample Document",
+      },
       children: [
         {
           type: "heading",
@@ -58,6 +61,9 @@ describe("main", () => {
     const directory = await mkdtemp(join(tmpdir(), "org-toolkit-"));
     const filePath = join(directory, "sample.org");
     const source = [
+      "#+TITLE: Org Mode Parsing",
+      "#+DATE: 2026-05-06",
+      "",
       "* TODO Project *Plan* :work:urgent:",
       "",
       "- [ ] Research /background/",
@@ -87,6 +93,9 @@ describe("main", () => {
     const directory = await mkdtemp(join(tmpdir(), "org-toolkit-"));
     const filePath = join(directory, "sample.org");
     const source = [
+      "#+TITLE: Org Mode Parsing",
+      "#+DATE: 2026-05-06",
+      "",
       "* TODO Project *Plan*",
       "",
       "- [ ] Research /background/",
@@ -106,6 +115,11 @@ describe("main", () => {
     expect(errorSpy).not.toHaveBeenCalled();
     expect(logSpy).toHaveBeenLastCalledWith(
       [
+        "---",
+        "title: Org Mode Parsing",
+        "date: 2026-05-06",
+        "---",
+        "",
         "# TODO Project **Plan**",
         "",
         "- [ ] Research *background*",
