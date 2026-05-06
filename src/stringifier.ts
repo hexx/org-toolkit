@@ -66,17 +66,17 @@ export function stringify(node: ASTNode): string {
 
 function stringifyRoot(node: Root): string {
   const metadata = Object.entries(node.metadata).map(([key, value]) => `#+${key}: ${value}`.trimEnd());
-  const children = node.children.map(stringify).filter((value) => value.length > 0);
+  const children = joinTopLevelChildren(node.children, stringify);
 
   if (metadata.length === 0) {
-    return children.join("\n\n");
+    return children;
   }
 
   if (children.length === 0) {
     return metadata.join("\n");
   }
 
-  return `${metadata.join("\n")}\n\n${children.join("\n\n")}`;
+  return `${metadata.join("\n")}\n\n${children}`;
 }
 
 function stringifyDocumentMetadata(node: DocumentMetadata): string {
@@ -100,6 +100,10 @@ function stringifyHeading(node: Heading): string {
     line += ` :${node.tags.join(":")}:`;
   }
 
+  if (Object.keys(node.properties).length > 0) {
+    return `${line}\n${stringifyPropertyDrawer(node.properties)}`;
+  }
+
   return line;
 }
 
@@ -121,6 +125,11 @@ function stringifyBlock(node: Block): string {
   const begin = `#+BEGIN_${node.blockName}${node.parameters.length > 0 ? ` ${node.parameters}` : ""}`;
   const end = `#+END_${node.blockName}`;
   return `${begin}${node.content}${end}`;
+}
+
+function stringifyPropertyDrawer(properties: Readonly<Record<string, string>>): string {
+  const lines = Object.entries(properties).map(([key, value]) => `:${key}: ${value}`.trimEnd());
+  return [":PROPERTIES:", ...lines, ":END:"].join("\n");
 }
 
 function stringifyTable(node: Table): string {
@@ -179,6 +188,28 @@ function calculateTableWidths(rows: ReadonlyArray<TableRow>): ReadonlyArray<numb
 
 function stringifyInline(nodes: ReadonlyArray<InlineNode>): string {
   return nodes.map((node) => stringify(node)).join("");
+}
+
+function joinTopLevelChildren<T extends { readonly type: string }>(
+  children: ReadonlyArray<T>,
+  renderNode: (node: T) => string,
+): string {
+  const rendered: string[] = [];
+
+  children.forEach((child, index) => {
+    const value = renderNode(child);
+    if (value.length === 0) {
+      return;
+    }
+
+    if (rendered.length > 0) {
+      rendered.push("\n\n");
+    }
+
+    rendered.push(value);
+  });
+
+  return rendered.join("");
 }
 
 function stringifyInlineNode(node: InlineNode): string {

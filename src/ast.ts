@@ -141,7 +141,7 @@ export type InlineNode =
  * characters.
  *
  * The parser keeps the heading extensible by storing the level, an optional
- * TODO keyword, inline children, and trailing tags.
+ * TODO keyword, inline children, trailing tags, and property drawer values.
  *
  * @example
  * ```ts
@@ -150,6 +150,7 @@ export type InlineNode =
  *   level: 1,
  *   todoKeyword: "TODO",
  *   tags: ["work", "urgent"],
+ *   properties: { AUTHOR: "Alice" },
  *   children: [{ type: "text", value: "My First Heading", position: {
  *     start: { index: 7, line: 1, column: 8 },
  *     end: { index: 23, line: 1, column: 24 },
@@ -166,6 +167,7 @@ export interface Heading extends NodeBase {
   readonly level: number;
   readonly todoKeyword?: string;
   readonly tags: ReadonlyArray<string>;
+  readonly properties: Readonly<Record<string, string>>;
   readonly children: ReadonlyArray<InlineNode>;
 }
 
