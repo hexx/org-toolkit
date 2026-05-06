@@ -57,7 +57,7 @@ const TODO_KEYWORDS = new Set([
  */
 export function parse(text: string): Root {
   const lines = collectLineEntries(text);
-  const metadata: DocumentMetadata[] = [];
+  const metadata: Record<string, string> = {};
   const children: Array<Heading | Paragraph | List | Block | Table> = [];
   let paragraphBuffer: LineEntry[] = [];
   let listBuffer: ListItem[] = [];
@@ -148,7 +148,8 @@ export function parse(text: string): Root {
       flushParagraph();
       flushList();
       flushTable();
-      metadata.push(parseMetadataLine(line));
+      const metadataEntry = parseMetadataLine(line);
+      metadata[metadataEntry.key] = metadataEntry.value;
       index += 1;
       continue;
     }
@@ -276,7 +277,7 @@ function collectLineEntries(text: string): ReadonlyArray<LineEntry> {
 }
 
 function parseMetadataLine(line: LineEntry): DocumentMetadata {
-  const match = line.text.match(/^#\+([A-Za-z0-9_-]+):[ \t]*(.*)$/);
+  const match = line.text.match(/^#\+([A-Za-z_]+):[ \t]*(.*)$/i);
   if (match === null) {
     throw new OrgParseError("Invalid metadata line", line.position.start);
   }
@@ -288,8 +289,8 @@ function parseMetadataLine(line: LineEntry): DocumentMetadata {
 
   return {
     type: "document-metadata",
-    key,
-    value: match[2] ?? "",
+    key: key.toUpperCase(),
+    value: (match[2] ?? "").trim(),
     position: line.position,
   };
 }
@@ -592,7 +593,7 @@ function isTableSeparatorLine(content: string): boolean {
 }
 
 function isMetadataLine(line: string): boolean {
-  return /^#\+[A-Za-z0-9_-]+:/.test(line);
+  return /^#\+[A-Za-z_]+:/i.test(line);
 }
 
 function isBlankLine(line: string): boolean {

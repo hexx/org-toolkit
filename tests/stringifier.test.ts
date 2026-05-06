@@ -62,6 +62,31 @@ describe("stringify", () => {
     ).toBe("[[https://github.com][*GitHub*]]");
   });
 
+  it("stringifies root metadata first", () => {
+    expect(
+      stringify({
+        type: "root",
+        metadata: {
+          TITLE: "Org Mode Parsing",
+          AUTHOR: "Alice",
+        },
+        children: [
+          {
+            type: "heading",
+            level: 1,
+            tags: [],
+            children: [{ type: "text", value: "Heading", position: { start: { index: 0, line: 1, column: 1 }, end: { index: 7, line: 1, column: 8 } } }],
+            position: { start: { index: 0, line: 1, column: 1 }, end: { index: 0, line: 1, column: 1 } },
+          },
+        ],
+        position: {
+          start: { index: 0, line: 1, column: 1 },
+          end: { index: 0, line: 1, column: 1 },
+        },
+      }),
+    ).toBe(["#+TITLE: Org Mode Parsing", "#+AUTHOR: Alice", "", "* Heading"].join("\n"));
+  });
+
   it("stringifies block nodes", () => {
     expect(
       stringify({
@@ -79,6 +104,9 @@ describe("stringify", () => {
 
   it("round trips a mixed org document", () => {
     const input = [
+      "#+TITLE: Org Mode Parsing",
+      "#+DATE: 2026-05-06",
+      "",
       "* TODO Project *Plan* :work:urgent:",
       "",
       "- [ ] Research /background/",

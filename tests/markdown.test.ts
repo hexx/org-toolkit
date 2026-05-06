@@ -23,6 +23,9 @@ describe("toMarkdown", () => {
 
   it("converts parsed org content to GFM", () => {
     const input = [
+      "#+TITLE: Org Mode Parsing",
+      "#+DATE: 2026-05-06",
+      "",
       "* TODO Project *Plan*",
       "",
       "- [ ] Research /background/",
@@ -46,6 +49,11 @@ describe("toMarkdown", () => {
 
     expect(toMarkdown(parse(input))).toBe(
       [
+        "---",
+        "title: Org Mode Parsing",
+        "date: 2026-05-06",
+        "---",
+        "",
         "# TODO Project **Plan**",
         "",
         "- [ ] Research *background*",

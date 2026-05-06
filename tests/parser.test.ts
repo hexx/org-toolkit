@@ -7,7 +7,7 @@ describe("parse", () => {
 
     expect(parse(input)).toEqual({
       type: "root",
-      metadata: [],
+      metadata: {},
       children: [
         {
           type: "heading",
@@ -34,6 +34,30 @@ describe("parse", () => {
         start: { index: 0, line: 1, column: 1 },
         end: { index: input.length, line: 1, column: input.length + 1 },
       },
+    });
+  });
+
+  it("parses document metadata into root metadata", () => {
+    const input = [
+      "#+TITLE: Org Mode Parsing",
+      "#+author: Alice",
+      "#+DATE: 2026-05-06",
+      "",
+      "* Heading",
+    ].join("\n");
+
+    expect(parse(input)).toMatchObject({
+      metadata: {
+        TITLE: "Org Mode Parsing",
+        AUTHOR: "Alice",
+        DATE: "2026-05-06",
+      },
+      children: [
+        {
+          type: "heading",
+          children: [{ type: "text", value: "Heading" }],
+        },
+      ],
     });
   });
 
