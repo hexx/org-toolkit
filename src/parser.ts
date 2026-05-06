@@ -1,4 +1,5 @@
 import type {
+  Block,
   DocumentMetadata,
   InlineNode,
   Heading,
@@ -56,7 +57,7 @@ const TODO_KEYWORDS = new Set([
 export function parse(text: string): Root {
   const lines = collectLineEntries(text);
   const metadata: DocumentMetadata[] = [];
-  const children: Array<Heading | Paragraph | List | Table> = [];
+  const children: Array<Heading | Paragraph | List | Block | Table> = [];
   let paragraphBuffer: LineEntry[] = [];
   let listBuffer: ListItem[] = [];
   let listKind: ListKind | null = null;
@@ -121,11 +122,24 @@ export function parse(text: string): Root {
     tableBuffer = [];
   };
 
-  for (const line of lines) {
+  for (let index = 0; index < lines.length; ) {
+    const line = lines[index]!;
+
     if (isBlankLine(line.text)) {
       flushParagraph();
       flushList();
       flushTable();
+      index += 1;
+      continue;
+    }
+
+    const block = parseBlockLine(lines, index, text);
+    if (block !== null) {
+      flushParagraph();
+      flushList();
+      flushTable();
+      children.push(block.block);
+      index = block.nextIndex;
       continue;
     }
 
@@ -134,6 +148,7 @@ export function parse(text: string): Root {
       flushList();
       flushTable();
       metadata.push(parseMetadataLine(line));
+      index += 1;
       continue;
     }
 
@@ -143,6 +158,7 @@ export function parse(text: string): Root {
       flushList();
       flushTable();
       children.push(heading);
+      index += 1;
       continue;
     }
 
@@ -151,6 +167,7 @@ export function parse(text: string): Root {
       flushParagraph();
       flushList();
       tableBuffer = [...tableBuffer, tableRowLine.row];
+      index += 1;
       continue;
     }
 
@@ -164,12 +181,14 @@ export function parse(text: string): Root {
 
       listBuffer = [...listBuffer, listItemLine.item];
       listKind = listItemLine.kind;
+      index += 1;
       continue;
     }
 
     flushTable();
     flushList();
     paragraphBuffer = [...paragraphBuffer, line];
+    index += 1;
   }
 
   flushParagraph();
@@ -315,6 +334,68 @@ function parseHeadingLine(line: LineEntry): Heading | null {
     children,
     position: line.position,
   };
+}
+
+interface ParsedBlockLine {
+  readonly block: Block;
+  readonly nextIndex: number;
+}
+
+function parseBlockLine(
+  lines: ReadonlyArray<LineEntry>,
+  startIndex: number,
+  text: string,
+): ParsedBlockLine | null {
+  const line = lines[startIndex];
+  if (line === undefined) {
+    return null;
+  }
+
+  const match = line.text.match(/^#\+begin_([A-Za-z0-9_-]+)(?:[ \t]+(.*))?$/i);
+  if (match === null) {
+    return null;
+  }
+
+  const rawBlockName = match[1];
+  if (rawBlockName === undefined) {
+    return null;
+  }
+
+  const blockName = rawBlockName.toUpperCase();
+  const parameters = (match[2] ?? "").trim();
+
+  for (let index = startIndex + 1; index < lines.length; index += 1) {
+    const candidate = lines[index];
+    if (candidate === undefined) {
+      break;
+    }
+
+    const endMatch = candidate.text.match(/^#\+end_([A-Za-z0-9_-]+)\s*$/i);
+    if (endMatch === null) {
+      continue;
+    }
+
+    const rawEndName = endMatch[1];
+    if (rawEndName === undefined || rawEndName.toUpperCase() !== blockName) {
+      continue;
+    }
+
+    return {
+      block: {
+        type: "block",
+        blockName,
+        parameters,
+        content: text.slice(line.position.end.index, candidate.position.start.index),
+        position: {
+          start: line.position.start,
+          end: candidate.position.end,
+        },
+      },
+      nextIndex: index + 1,
+    };
+  }
+
+  throw new OrgParseError(`Unterminated block: ${blockName}`, line.position.start);
 }
 
 function parseListItemLine(line: LineEntry): ParsedListItemLine | null {

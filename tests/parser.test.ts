@@ -106,6 +106,25 @@ describe("parse", () => {
     });
   });
 
+  it("parses case-insensitive source blocks", () => {
+    const input = ["#+begin_src typescript", "console.log('hi');", "#+end_src"].join("\n");
+
+    expect(parse(input)).toMatchObject({
+      children: [
+        {
+          type: "block",
+          blockName: "SRC",
+          parameters: "typescript",
+          content: "\nconsole.log('hi');\n",
+          position: {
+            start: { index: 0, line: 1, column: 1 },
+            end: { index: input.length, line: 3, column: 10 },
+          },
+        },
+      ],
+    });
+  });
+
   it("parses ordered lists into a single list node", () => {
     const ast = parse("1. First\n2) Second");
 

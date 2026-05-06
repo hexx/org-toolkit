@@ -42,12 +42,31 @@ describe("stringify", () => {
     ).toBe("A *bold* text");
   });
 
+  it("stringifies block nodes", () => {
+    expect(
+      stringify({
+        type: "block",
+        blockName: "SRC",
+        parameters: "typescript",
+        content: "\nconsole.log('hi');\n",
+        position: {
+          start: { index: 0, line: 1, column: 1 },
+          end: { index: 0, line: 1, column: 1 },
+        },
+      }),
+    ).toBe(["#+BEGIN_SRC typescript", "console.log('hi');", "#+END_SRC"].join("\n"));
+  });
+
   it("round trips a mixed org document", () => {
     const input = [
       "* TODO Project *Plan* :work:urgent:",
       "",
       "- [ ] Research /background/",
       "- [X] Implement =core=",
+      "",
+      "#+BEGIN_SRC typescript",
+      "console.log('hi');",
+      "#+END_SRC",
       "",
       "| Name  | Age | Role     |",
       "|-----+---+--------|",

@@ -1,5 +1,6 @@
 import type {
   ASTNode,
+  Block,
   DocumentMetadata,
   InlineNode,
   Heading,
@@ -38,6 +39,8 @@ export function stringify(node: ASTNode): string {
       return stringifyList(node);
     case "list-item":
       return stringifyListItem(node);
+    case "block":
+      return stringifyBlock(node);
     case "table":
       return stringifyTable(node);
     case "table-row":
@@ -109,6 +112,12 @@ function stringifyListItem(node: ListItem): string {
   const prefix = node.checkbox === null ? node.marker : `${node.marker} ${formatCheckbox(node.checkbox)}`;
   const content = stringifyInline(node.children);
   return content.length > 0 ? `${prefix} ${content}` : prefix;
+}
+
+function stringifyBlock(node: Block): string {
+  const begin = `#+BEGIN_${node.blockName}${node.parameters.length > 0 ? ` ${node.parameters}` : ""}`;
+  const end = `#+END_${node.blockName}`;
+  return `${begin}${node.content}${end}`;
 }
 
 function stringifyTable(node: Table): string {

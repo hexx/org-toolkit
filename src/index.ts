@@ -1,5 +1,6 @@
 export type {
   ASTNode,
+  Block,
   BoldNode,
   CodeNode,
   DocumentMetadata,
