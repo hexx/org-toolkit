@@ -8,6 +8,7 @@ import type {
   ListItemCheckboxState,
   ListKind,
   LinkNode,
+  Planning,
   Paragraph,
   Position,
   Root,
@@ -16,8 +17,14 @@ import type {
   TableCell,
   TableRow,
   TableRowKind,
+  TimestampNode,
 } from "./ast.js";
 import { OrgParseError } from "./errors.js";
+import {
+  rememberBlankLinesAfter,
+  rememberHeadingPlanningLines,
+  rememberTimestampText,
+} from "./node-annotations.js";
 
 interface LineEntry {
   readonly text: string;
@@ -63,6 +70,16 @@ export function parse(text: string): Root {
   let listBuffer: ListItem[] = [];
   let listKind: ListKind | null = null;
   let tableBuffer: TableRow[] = [];
+  let pendingBlankLines = 0;
+
+  const pushChild = (child: Heading | Paragraph | List | Block | Table): void => {
+    if (children.length > 0) {
+      rememberBlankLinesAfter(children[children.length - 1]!, pendingBlankLines);
+    }
+
+    pendingBlankLines = 0;
+    children.push(child);
+  };
 
   const flushParagraph = (): void => {
     if (paragraphBuffer.length === 0) {
@@ -77,7 +94,7 @@ export function parse(text: string): Root {
       end: last.position.end,
     };
 
-    children.push({
+    pushChild({
       type: "paragraph",
       children: parseInline(value, paragraphPosition.start),
       position: paragraphPosition,
@@ -92,7 +109,7 @@ export function parse(text: string): Root {
 
     const first = listBuffer[0]!;
     const last = listBuffer[listBuffer.length - 1]!;
-    children.push({
+    pushChild({
       type: "list",
       kind: listKind,
       children: [...listBuffer],
@@ -112,7 +129,7 @@ export function parse(text: string): Root {
 
     const first = tableBuffer[0]!;
     const last = tableBuffer[tableBuffer.length - 1]!;
-    children.push({
+    pushChild({
       type: "table",
       children: [...tableBuffer],
       position: {
@@ -130,6 +147,7 @@ export function parse(text: string): Root {
       flushParagraph();
       flushList();
       flushTable();
+      pendingBlankLines += 1;
       index += 1;
       continue;
     }
@@ -139,7 +157,7 @@ export function parse(text: string): Root {
       flushParagraph();
       flushList();
       flushTable();
-      children.push(block.block);
+      pushChild(block.block);
       index = block.nextIndex;
       continue;
     }
@@ -159,7 +177,7 @@ export function parse(text: string): Root {
       flushParagraph();
       flushList();
       flushTable();
-      children.push(heading.heading);
+      pushChild(heading.heading);
       index = heading.nextIndex;
       continue;
     }
@@ -330,16 +348,18 @@ function parseHeadingLine(
       ? line.position.start
       : createOffsetPosition(line.position.start, stars.length + spaces.length + restOffset);
   const children = parseInline(title, titlePosition);
-  const propertyDrawer = parsePropertyDrawer(lines, startIndex + 1);
+  const planning = parsePlanningSection(lines, startIndex + 1);
+  const propertyDrawer = parsePropertyDrawer(lines, planning?.nextIndex ?? startIndex + 1);
   const properties = propertyDrawer?.properties ?? {};
-  const nextIndex = propertyDrawer?.nextIndex ?? startIndex + 1;
-  const endPosition = propertyDrawer?.endPosition ?? line.position.end;
+  const nextIndex = propertyDrawer?.nextIndex ?? planning?.nextIndex ?? startIndex + 1;
+  const endPosition = propertyDrawer?.endPosition ?? planning?.endPosition ?? line.position.end;
 
   const heading: Heading = {
     type: "heading",
     level,
     tags,
     properties,
+    ...(planning !== null ? { planning: planning.planning } : {}),
     children,
     position: {
       start: line.position.start,
@@ -348,9 +368,129 @@ function parseHeadingLine(
     ...(todoKeyword !== undefined ? { todoKeyword } : {}),
   };
 
+  if (planning !== null && planning.rawLines.length > 0) {
+    rememberHeadingPlanningLines(heading, planning.rawLines);
+  }
+
   return {
     heading,
     nextIndex,
+  };
+}
+
+interface ParsedPlanningSection {
+  readonly planning: Readonly<Planning>;
+  readonly nextIndex: number;
+  readonly endPosition: Position;
+  readonly rawLines: ReadonlyArray<string>;
+}
+
+type MutablePlanning = {
+  scheduled?: TimestampNode;
+  deadline?: TimestampNode;
+  closed?: TimestampNode;
+};
+
+function parsePlanningSection(
+  lines: ReadonlyArray<LineEntry>,
+  startIndex: number,
+): ParsedPlanningSection | null {
+  const planning: MutablePlanning = {};
+  const rawLines: string[] = [];
+  let nextIndex = startIndex;
+  let endPosition: Position | null = null;
+  let matchedAny = false;
+
+  while (nextIndex < lines.length) {
+    const line = lines[nextIndex];
+    if (line === undefined) {
+      break;
+    }
+
+    const parsed = parsePlanningLine(line);
+    if (parsed === null) {
+      break;
+    }
+
+    matchedAny = true;
+    rawLines.push(line.text);
+    endPosition = line.position.end;
+
+    if (parsed.planning.scheduled !== undefined) {
+      planning.scheduled = parsed.planning.scheduled;
+    }
+
+    if (parsed.planning.deadline !== undefined) {
+      planning.deadline = parsed.planning.deadline;
+    }
+
+    if (parsed.planning.closed !== undefined) {
+      planning.closed = parsed.planning.closed;
+    }
+
+    nextIndex += 1;
+  }
+
+  if (!matchedAny || endPosition === null) {
+    return null;
+  }
+
+  return {
+    planning: planning as Readonly<Planning>,
+    nextIndex,
+    endPosition,
+    rawLines,
+  };
+}
+
+interface ParsedPlanningLine {
+  readonly planning: Readonly<Planning>;
+}
+
+function parsePlanningLine(line: LineEntry): ParsedPlanningLine | null {
+  const planningPattern = /(?:^|\s)(SCHEDULED|DEADLINE|CLOSED):\s*(<[^>]+>|\[[^\]]+\])/gi;
+  const planning: MutablePlanning = {};
+  let matchedAny = false;
+  let match: RegExpExecArray | null;
+
+  while ((match = planningPattern.exec(line.text)) !== null) {
+    const label = match[1]?.toLowerCase();
+    const timestampText = match[2];
+    if (label === undefined || timestampText === undefined) {
+      continue;
+    }
+
+    const timestampStart = match.index + match[0].indexOf(timestampText);
+    const timestamp = parseTimestampText(
+      timestampText,
+      createOffsetPosition(line.position.start, timestampStart),
+    );
+    if (timestamp === null) {
+      throw new OrgParseError("Invalid planning timestamp", line.position.start);
+    }
+
+    matchedAny = true;
+    switch (label) {
+      case "scheduled":
+        planning.scheduled = timestamp;
+        break;
+      case "deadline":
+        planning.deadline = timestamp;
+        break;
+      case "closed":
+        planning.closed = timestamp;
+        break;
+      default:
+        break;
+    }
+  }
+
+  if (!matchedAny) {
+    return null;
+  }
+
+  return {
+    planning: planning as Readonly<Planning>,
   };
 }
 
@@ -704,6 +844,15 @@ function parseInline(text: string, startPosition: Position): ReadonlyArray<Inlin
   };
 
   while (index < text.length) {
+    const timestamp = parseTimestampAt(text, startPosition, index);
+    if (timestamp !== null) {
+      flushText(index);
+      nodes.push(timestamp.node);
+      index = timestamp.nextIndex;
+      textStart = index;
+      continue;
+    }
+
     const link = parseLink(text, startPosition, index);
     if (link !== null) {
       flushText(index);
@@ -802,6 +951,102 @@ function parseInline(text: string, startPosition: Position): ReadonlyArray<Inlin
 
   flushText(text.length);
   return nodes;
+}
+
+interface ParsedTimestamp {
+  readonly node: TimestampNode;
+  readonly nextIndex: number;
+}
+
+function parseTimestampAt(
+  text: string,
+  startPosition: Position,
+  index: number,
+): ParsedTimestamp | null {
+  const opening = text[index];
+  if (opening !== "<" && opening !== "[") {
+    return null;
+  }
+
+  const closing = opening === "<" ? ">" : "]";
+  const closingIndex = text.indexOf(closing, index + 1);
+  if (closingIndex === -1) {
+    return null;
+  }
+
+  const rawText = text.slice(index, closingIndex + 1);
+  const node = parseTimestampText(rawText, createOffsetPosition(startPosition, index));
+  if (node === null) {
+    return null;
+  }
+
+  return {
+    node,
+    nextIndex: closingIndex + 1,
+  };
+}
+
+function parseTimestampText(rawText: string, position: Position): TimestampNode | null {
+  if ((rawText.startsWith("<") && !rawText.endsWith(">")) || (rawText.startsWith("[") && !rawText.endsWith("]"))) {
+    return null;
+  }
+
+  const opening = rawText[0];
+  const closing = rawText[rawText.length - 1];
+  if ((opening !== "<" && opening !== "[") || (closing !== ">" && closing !== "]")) {
+    return null;
+  }
+
+  const isActive = opening === "<";
+  const inner = rawText.slice(1, -1).trim();
+  const match = inner.match(/^(\d{4})-(\d{2})-(\d{2})(?:\s+(.*))?$/);
+  if (match === null) {
+    return null;
+  }
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const details = match[4]?.trim();
+  const tokens = details === undefined || details.length === 0 ? [] : details.split(/\s+/);
+  const repeaterIndex = findLastMatchingIndex(tokens, isRepeaterToken);
+  const repeater = repeaterIndex === -1 ? undefined : tokens.splice(repeaterIndex, 1)[0];
+  const timeIndex = findLastMatchingIndex(tokens, (token) => /^\d{2}:\d{2}$/.test(token));
+  const time = timeIndex === -1 ? undefined : tokens.splice(timeIndex, 1)[0];
+  const timestamp: TimestampNode = {
+    type: "timestamp",
+    isActive,
+    year,
+    month,
+    day,
+    ...(time !== undefined ? { time } : {}),
+    ...(repeater !== undefined ? { repeater } : {}),
+    position: {
+      start: position,
+      end: createOffsetPosition(position, rawText.length),
+    },
+  };
+
+  rememberTimestampText(timestamp, rawText);
+  return timestamp;
+}
+
+function isRepeaterToken(token: string): boolean {
+  return /^([.+-]?\+?\d+[dwmyh])(?:[A-Za-z].*)?$/.test(token);
+}
+
+function findLastMatchingIndex(
+  values: ReadonlyArray<string>,
+  predicate: (value: string) => boolean,
+): number {
+  for (let index = values.length - 1; index >= 0; index -= 1) {
+    const value = values[index];
+    if (value !== undefined && predicate(value)) {
+      return index;
+    }
+  }
+
+  return -1;
 }
 
 function isInlineDelimiter(character: string): boolean {

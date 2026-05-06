@@ -13,7 +13,13 @@ import type {
   TableCell,
   TableRow,
   TextNode,
+  TimestampNode,
 } from "./ast.js";
+import {
+  readBlankLinesAfter,
+  readHeadingPlanningLines,
+  readTimestampText,
+} from "./node-annotations.js";
 
 /**
  * Convert an AST node back into normalized org-mode text.
@@ -59,6 +65,8 @@ export function stringify(node: ASTNode): string {
       return stringifyInlineNode(node);
     case "link":
       return stringifyLink(node);
+    case "timestamp":
+      return stringifyTimestamp(node);
     default:
       return assertNever(node);
   }
@@ -100,11 +108,17 @@ function stringifyHeading(node: Heading): string {
     line += ` :${node.tags.join(":")}:`;
   }
 
-  if (Object.keys(node.properties).length > 0) {
-    return `${line}\n${stringifyPropertyDrawer(node.properties)}`;
+  const sections = [line];
+  const planning = stringifyHeadingPlanning(node);
+  if (planning.length > 0) {
+    sections.push(...planning);
   }
 
-  return line;
+  if (Object.keys(node.properties).length > 0) {
+    sections.push(stringifyPropertyDrawer(node.properties));
+  }
+
+  return sections.join("\n");
 }
 
 function stringifyParagraph(node: Paragraph): string {
@@ -130,6 +144,30 @@ function stringifyBlock(node: Block): string {
 function stringifyPropertyDrawer(properties: Readonly<Record<string, string>>): string {
   const lines = Object.entries(properties).map(([key, value]) => `:${key}: ${value}`.trimEnd());
   return [":PROPERTIES:", ...lines, ":END:"].join("\n");
+}
+
+function stringifyHeadingPlanning(node: Heading): ReadonlyArray<string> {
+  const rawLines = readHeadingPlanningLines(node);
+  if (rawLines !== undefined) {
+    return rawLines;
+  }
+
+  if (node.planning === undefined) {
+    return [];
+  }
+
+  const lines: string[] = [];
+  if (node.planning.scheduled !== undefined) {
+    lines.push(`SCHEDULED: ${stringifyTimestamp(node.planning.scheduled)}`);
+  }
+  if (node.planning.deadline !== undefined) {
+    lines.push(`DEADLINE: ${stringifyTimestamp(node.planning.deadline)}`);
+  }
+  if (node.planning.closed !== undefined) {
+    lines.push(`CLOSED: ${stringifyTimestamp(node.planning.closed)}`);
+  }
+
+  return lines;
 }
 
 function stringifyTable(node: Table): string {
@@ -190,6 +228,27 @@ function stringifyInline(nodes: ReadonlyArray<InlineNode>): string {
   return nodes.map((node) => stringify(node)).join("");
 }
 
+function stringifyTimestamp(node: TimestampNode): string {
+  const rawText = readTimestampText(node);
+  if (rawText !== undefined) {
+    return rawText;
+  }
+
+  const open = node.isActive ? "<" : "[";
+  const close = node.isActive ? ">" : "]";
+  const parts = [`${node.year.toString().padStart(4, "0")}-${node.month.toString().padStart(2, "0")}-${node.day.toString().padStart(2, "0")}`];
+
+  if (node.time !== undefined) {
+    parts.push(node.time);
+  }
+
+  if (node.repeater !== undefined) {
+    parts.push(node.repeater);
+  }
+
+  return `${open}${parts.join(" ")}${close}`;
+}
+
 function joinTopLevelChildren<T extends { readonly type: string }>(
   children: ReadonlyArray<T>,
   renderNode: (node: T) => string,
@@ -203,7 +262,10 @@ function joinTopLevelChildren<T extends { readonly type: string }>(
     }
 
     if (rendered.length > 0) {
-      rendered.push("\n\n");
+      const previous = children[index - 1];
+      const blankLinesAfter = previous === undefined ? undefined : readBlankLinesAfter(previous);
+      const blankLines = blankLinesAfter ?? 1;
+      rendered.push("\n".repeat(blankLines + 1));
     }
 
     rendered.push(value);
@@ -230,6 +292,8 @@ function stringifyInlineNode(node: InlineNode): string {
       return `~${node.value}~`;
     case "link":
       return stringifyLink(node);
+    case "timestamp":
+      return stringifyTimestamp(node);
     default:
       return assertNever(node);
   }

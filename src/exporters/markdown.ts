@@ -14,7 +14,12 @@ import type {
   TableCell,
   TableRow,
   TextNode,
+  TimestampNode,
 } from "../ast.js";
+import {
+  readBlankLinesAfter,
+  readTimestampText,
+} from "../node-annotations.js";
 
 interface RenderContext {
   readonly listKind?: ListKind;
@@ -65,6 +70,8 @@ function render(node: ASTNode, context: RenderContext): string {
       return renderInlineNode(node);
     case "link":
       return renderLink(node);
+    case "timestamp":
+      return renderTimestamp(node);
     default:
       return assertNever(node);
   }
@@ -102,11 +109,18 @@ function renderFrontmatter(metadata: Readonly<Record<string, string>>): string {
 function renderHeading(node: Heading): string {
   const content = renderInline(node.children);
   const prefix = `${"#".repeat(node.level)} ${node.todoKeyword ? `${node.todoKeyword} ` : ""}${content}`.trimEnd();
-  if (node.tags.length === 0) {
-    return `${prefix}${renderHeadingProperties(node.properties)}`;
+  const sections = [node.tags.length === 0 ? prefix : `${prefix} <!-- :${node.tags.join(":")}: -->`];
+  const planning = renderHeadingPlanning(node);
+  if (planning.length > 0) {
+    sections.push(...planning);
   }
 
-  return `${prefix} <!-- :${node.tags.join(":")}: -->${renderHeadingProperties(node.properties)}`;
+  const properties = renderHeadingProperties(node.properties);
+  if (properties.length > 0) {
+    sections.push(properties);
+  }
+
+  return sections.join("\n");
 }
 
 function renderParagraph(node: Paragraph, context: RenderContext): string {
@@ -163,7 +177,26 @@ function renderHeadingProperties(properties: Readonly<Record<string, string>>): 
   }
 
   const lines = Object.entries(properties).map(([key, value]) => `:${key}: ${value}`.trimEnd());
-  return `\n<!--\n${[":PROPERTIES:", ...lines, ":END:"].join("\n")}\n-->`;
+  return `<!--\n${[":PROPERTIES:", ...lines, ":END:"].join("\n")}\n-->`;
+}
+
+function renderHeadingPlanning(node: Heading): ReadonlyArray<string> {
+  if (node.planning === undefined) {
+    return [];
+  }
+
+  const lines: string[] = [];
+  if (node.planning.scheduled !== undefined) {
+    lines.push(`**SCHEDULED:** ${renderTimestamp(node.planning.scheduled)}`);
+  }
+  if (node.planning.deadline !== undefined) {
+    lines.push(`**DEADLINE:** ${renderTimestamp(node.planning.deadline)}`);
+  }
+  if (node.planning.closed !== undefined) {
+    lines.push(`**CLOSED:** ${renderTimestamp(node.planning.closed)}`);
+  }
+
+  return lines;
 }
 
 function renderTable(node: Table): string {
@@ -197,6 +230,22 @@ function renderText(node: TextNode): string {
   return node.value;
 }
 
+function renderTimestamp(node: TimestampNode): string {
+  const rawText = readTimestampText(node);
+  if (rawText !== undefined) {
+    const inner = rawText.slice(1, -1);
+    const parts = inner.split(/\s+/);
+    if (parts.length >= 1) {
+      const date = parts[0] ?? "";
+      const time = parts.find((part) => /^\d{2}:\d{2}$/.test(part));
+      return time === undefined ? date : `${date} ${time}`;
+    }
+  }
+
+  const date = `${node.year.toString().padStart(4, "0")}-${node.month.toString().padStart(2, "0")}-${node.day.toString().padStart(2, "0")}`;
+  return node.time === undefined ? date : `${date} ${node.time}`;
+}
+
 function joinTopLevelChildren<T extends { readonly type: string }>(
   children: ReadonlyArray<T>,
   renderNode: (node: T) => string,
@@ -210,7 +259,10 @@ function joinTopLevelChildren<T extends { readonly type: string }>(
     }
 
     if (rendered.length > 0) {
-      rendered.push("\n\n");
+      const previous = children[index - 1];
+      const blankLinesAfter = previous === undefined ? undefined : readBlankLinesAfter(previous);
+      const blankLines = blankLinesAfter ?? 1;
+      rendered.push("\n".repeat(blankLines + 1));
     }
 
     rendered.push(value);
@@ -240,6 +292,8 @@ function renderInlineNode(node: InlineNode): string {
       return renderCodeSpan(node.value);
     case "link":
       return renderLink(node);
+    case "timestamp":
+      return renderTimestamp(node);
     default:
       return assertNever(node);
   }

@@ -134,6 +134,7 @@ export type InlineNode =
   | CodeNode
   | VerbatimNode
   | LinkNode
+  | TimestampNode
   | StrikeThroughNode;
 
 /**
@@ -168,6 +169,7 @@ export interface Heading extends NodeBase {
   readonly todoKeyword?: string;
   readonly tags: ReadonlyArray<string>;
   readonly properties: Readonly<Record<string, string>>;
+  readonly planning?: Readonly<Planning>;
   readonly children: ReadonlyArray<InlineNode>;
 }
 
@@ -425,6 +427,61 @@ export interface LinkNode extends NodeBase {
 export interface StrikeThroughNode extends NodeBase {
   readonly type: "strike-through";
   readonly children: ReadonlyArray<InlineNode>;
+}
+
+/**
+ * The planning metadata attached to a heading.
+ *
+ * @example
+ * ```ts
+ * const planning: Planning = {
+ *   scheduled: {
+ *     type: "timestamp",
+ *     isActive: true,
+ *     year: 2026,
+ *     month: 5,
+ *     day: 10,
+ *     position: {
+ *       start: { index: 0, line: 1, column: 1 },
+ *       end: { index: 18, line: 1, column: 19 },
+ *     },
+ *   },
+ * };
+ * ```
+ */
+export interface Planning {
+  readonly scheduled?: TimestampNode;
+  readonly deadline?: TimestampNode;
+  readonly closed?: TimestampNode;
+}
+
+/**
+ * An org timestamp rendered inline or inside planning metadata.
+ *
+ * @example
+ * ```ts
+ * const timestamp: TimestampNode = {
+ *   type: "timestamp",
+ *   isActive: true,
+ *   year: 2026,
+ *   month: 5,
+ *   day: 10,
+ *   time: "10:00",
+ *   position: {
+ *     start: { index: 0, line: 1, column: 1 },
+ *     end: { index: 22, line: 1, column: 23 },
+ *   },
+ * };
+ * ```
+ */
+export interface TimestampNode extends NodeBase {
+  readonly type: "timestamp";
+  readonly isActive: boolean;
+  readonly year: number;
+  readonly month: number;
+  readonly day: number;
+  readonly time?: string;
+  readonly repeater?: string;
 }
 
 /**

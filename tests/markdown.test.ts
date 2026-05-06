@@ -85,4 +85,21 @@ describe("toMarkdown", () => {
       ].join("\n"),
     );
   });
+
+  it("renders planning lines and inline timestamps", () => {
+    const input = [
+      "* TODO Prepare presentation",
+      "SCHEDULED: <2026-05-10 Sun> DEADLINE: <2026-05-12 Tue 10:00>",
+      "Meeting is set for [2026-05-08 Fri 15:00].",
+    ].join("\n");
+
+    expect(toMarkdown(parse(input))).toBe(
+      [
+        "# TODO Prepare presentation",
+        "**SCHEDULED:** 2026-05-10",
+        "**DEADLINE:** 2026-05-12 10:00",
+        "Meeting is set for 2026-05-08 15:00.",
+      ].join("\n"),
+    );
+  });
 });
