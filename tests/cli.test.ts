@@ -18,7 +18,7 @@ describe("main", () => {
 
     expect(exitCode).toBe(1);
     expect(logSpy).toHaveBeenCalledWith(
-      "Usage: tsx src/cli.ts [--roundtrip] <path/to/file.org>",
+      "Usage: tsx src/cli.ts [--markdown|--roundtrip] <path/to/file.org>",
     );
   });
 
@@ -75,5 +75,30 @@ describe("main", () => {
     expect(exitCode).toBe(0);
     expect(errorSpy).not.toHaveBeenCalled();
     expect(logSpy).toHaveBeenLastCalledWith(source);
+  });
+
+  it("prints markdown when requested", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "org-toolkit-"));
+    const filePath = join(directory, "sample.org");
+    const source = [
+      "* TODO Project Plan",
+      "",
+      "- [ ] Research",
+      "- [X] Implement",
+    ].join("\n");
+    await writeFile(filePath, source, "utf8");
+
+    const exitCode = await main(["--markdown", filePath]);
+
+    expect(exitCode).toBe(0);
+    expect(errorSpy).not.toHaveBeenCalled();
+    expect(logSpy).toHaveBeenLastCalledWith(
+      [
+        "# TODO Project Plan",
+        "",
+        "- [ ] Research",
+        "- [x] Implement",
+      ].join("\n"),
+    );
   });
 });
