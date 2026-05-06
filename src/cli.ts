@@ -4,6 +4,7 @@
  * ```bash
  * npx tsx src/cli.ts path/to/file.org
  * npx ts-node src/cli.ts path/to/file.org
+ * npx tsx src/cli.ts --roundtrip path/to/file.org
  * ```
  */
 import { readFile } from "node:fs/promises";
@@ -11,8 +12,9 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Parser } from "./parser.js";
 import { OrgParseError } from "./errors.js";
+import { stringify } from "./stringifier.js";
 
-const USAGE = "Usage: tsx src/cli.ts <path/to/file.org>";
+const USAGE = "Usage: tsx src/cli.ts [--roundtrip] <path/to/file.org>";
 
 /**
  * Execute the CLI and return an exit code.
@@ -23,21 +25,69 @@ const USAGE = "Usage: tsx src/cli.ts <path/to/file.org>";
  * ```
  */
 export async function main(argv: ReadonlyArray<string> = process.argv.slice(2)): Promise<number> {
-  const filePath = argv[0];
-  if (filePath === undefined || filePath === "--help" || filePath === "-h") {
+  const options = parseCliArgs(argv);
+  if (options.showUsage) {
     console.log(USAGE);
-    return filePath === undefined ? 1 : 0;
+    return options.filePath === undefined ? 1 : 0;
+  }
+
+  const filePath = options.filePath;
+  if (filePath === undefined) {
+    console.log(USAGE);
+    return 1;
   }
 
   try {
     const source = await readFile(filePath, "utf8");
     const ast = Parser.parse(source);
-    console.log(JSON.stringify(ast, null, 2));
+    console.log(options.roundtrip ? stringify(ast) : JSON.stringify(ast, null, 2));
     return 0;
   } catch (error: unknown) {
     reportError(error);
     return 1;
   }
+}
+
+interface CliOptions {
+  readonly filePath: string | undefined;
+  readonly roundtrip: boolean;
+  readonly showUsage: boolean;
+}
+
+function parseCliArgs(argv: ReadonlyArray<string>): CliOptions {
+  let roundtrip = false;
+  let filePath: string | undefined;
+  let showUsage = false;
+
+  for (const arg of argv) {
+    if (arg === "--roundtrip") {
+      roundtrip = true;
+      continue;
+    }
+
+    if (arg === "--help" || arg === "-h") {
+      showUsage = true;
+      continue;
+    }
+
+    if (arg.startsWith("-")) {
+      continue;
+    }
+
+    if (filePath === undefined) {
+      filePath = arg;
+    }
+  }
+
+  if (filePath === undefined) {
+    showUsage = true;
+  }
+
+  return {
+    filePath,
+    roundtrip,
+    showUsage,
+  };
 }
 
 function reportError(error: unknown): void {

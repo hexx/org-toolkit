@@ -1,4 +1,5 @@
 export type {
+  ASTNode,
   DocumentMetadata,
   Heading,
   List,
@@ -18,3 +19,4 @@ export type {
 export { OrgParseError } from "./errors.js";
 export { Parser } from "./parser.js";
 export { parse } from "./parser.js";
+export { stringify } from "./stringifier.js";
