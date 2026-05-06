@@ -63,7 +63,7 @@ export interface NodeBase {
 export interface Root extends NodeBase {
   readonly type: "root";
   readonly metadata: ReadonlyArray<DocumentMetadata>;
-  readonly children: ReadonlyArray<Heading | Paragraph>;
+  readonly children: ReadonlyArray<Heading | Paragraph | List>;
 }
 
 /**
@@ -87,6 +87,26 @@ export interface DocumentMetadata extends NodeBase {
   readonly key: string;
   readonly value: string;
 }
+
+/**
+ * The category of a list node.
+ *
+ * @example
+ * ```ts
+ * const kind: ListKind = "unordered";
+ * ```
+ */
+export type ListKind = "unordered" | "ordered";
+
+/**
+ * The checkbox state attached to a list item.
+ *
+ * @example
+ * ```ts
+ * const checkbox: ListItemCheckboxState = "checked";
+ * ```
+ */
+export type ListItemCheckboxState = "checked" | "unchecked" | null;
 
 /**
  * A heading node parsed from a line that starts with one or more `*`
@@ -147,6 +167,52 @@ export interface Heading extends NodeBase {
 export interface Paragraph extends NodeBase {
   readonly type: "paragraph";
   readonly children: ReadonlyArray<Text>;
+}
+
+/**
+ * A list node that groups consecutive list items of the same kind.
+ *
+ * @example
+ * ```ts
+ * const list: List = {
+ *   type: "list",
+ *   kind: "unordered",
+ *   children: [],
+ *   position: {
+ *     start: { index: 0, line: 1, column: 1 },
+ *     end: { index: 0, line: 1, column: 1 },
+ *   },
+ * };
+ * ```
+ */
+export interface List extends NodeBase {
+  readonly type: "list";
+  readonly kind: ListKind;
+  readonly children: ReadonlyArray<ListItem>;
+}
+
+/**
+ * A single list item with its marker, checkbox state, and child nodes.
+ *
+ * @example
+ * ```ts
+ * const item: ListItem = {
+ *   type: "list-item",
+ *   marker: "-",
+ *   checkbox: "unchecked",
+ *   children: [],
+ *   position: {
+ *     start: { index: 0, line: 1, column: 1 },
+ *     end: { index: 8, line: 1, column: 9 },
+ *   },
+ * };
+ * ```
+ */
+export interface ListItem extends NodeBase {
+  readonly type: "list-item";
+  readonly marker: string;
+  readonly checkbox: ListItemCheckboxState;
+  readonly children: ReadonlyArray<Text | Paragraph | List>;
 }
 
 /**
