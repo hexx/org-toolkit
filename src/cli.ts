@@ -5,6 +5,7 @@
  * npx tsx src/cli.ts path/to/file.org
  * npx ts-node src/cli.ts path/to/file.org
  * npx tsx src/cli.ts --roundtrip path/to/file.org
+ * npx tsx src/cli.ts --markdown path/to/file.org
  * ```
  */
 import { readFile } from "node:fs/promises";
@@ -12,9 +13,10 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Parser } from "./parser.js";
 import { OrgParseError } from "./errors.js";
+import { toMarkdown } from "./exporters/markdown.js";
 import { stringify } from "./stringifier.js";
 
-const USAGE = "Usage: tsx src/cli.ts [--roundtrip] <path/to/file.org>";
+const USAGE = "Usage: tsx src/cli.ts [--markdown|--roundtrip] <path/to/file.org>";
 
 /**
  * Execute the CLI and return an exit code.
@@ -40,7 +42,13 @@ export async function main(argv: ReadonlyArray<string> = process.argv.slice(2)):
   try {
     const source = await readFile(filePath, "utf8");
     const ast = Parser.parse(source);
-    console.log(options.roundtrip ? stringify(ast) : JSON.stringify(ast, null, 2));
+    if (options.markdown) {
+      console.log(toMarkdown(ast));
+    } else if (options.roundtrip) {
+      console.log(stringify(ast));
+    } else {
+      console.log(JSON.stringify(ast, null, 2));
+    }
     return 0;
   } catch (error: unknown) {
     reportError(error);
@@ -50,16 +58,23 @@ export async function main(argv: ReadonlyArray<string> = process.argv.slice(2)):
 
 interface CliOptions {
   readonly filePath: string | undefined;
+  readonly markdown: boolean;
   readonly roundtrip: boolean;
   readonly showUsage: boolean;
 }
 
 function parseCliArgs(argv: ReadonlyArray<string>): CliOptions {
+  let markdown = false;
   let roundtrip = false;
   let filePath: string | undefined;
   let showUsage = false;
 
   for (const arg of argv) {
+    if (arg === "--markdown") {
+      markdown = true;
+      continue;
+    }
+
     if (arg === "--roundtrip") {
       roundtrip = true;
       continue;
@@ -85,6 +100,7 @@ function parseCliArgs(argv: ReadonlyArray<string>): CliOptions {
 
   return {
     filePath,
+    markdown,
     roundtrip,
     showUsage,
   };
