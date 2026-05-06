@@ -31,5 +31,8 @@ export type {
 export { OrgParseError } from "./errors.js";
 export { Parser } from "./parser.js";
 export { parse } from "./parser.js";
+export { findAllByType, findHeadingsByTag, findTodos } from "./query.js";
+export type { Visitor, VisitorCallback, VisitorMap, WalkContext } from "./traverse.js";
+export { walk } from "./traverse.js";
 export { stringify } from "./stringifier.js";
 export { toMarkdown } from "./exporters/markdown.js";
