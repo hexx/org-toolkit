@@ -25,7 +25,17 @@ describe("main", () => {
   it("prints AST JSON for an org file", async () => {
     const directory = await mkdtemp(join(tmpdir(), "org-toolkit-"));
     const filePath = join(directory, "sample.org");
-    await writeFile(filePath, "#+TITLE: Sample Document\n* TODO Sample Heading :work:\n", "utf8");
+    await writeFile(
+      filePath,
+      [
+        "#+TITLE: Sample Document",
+        "* TODO Sample Heading :work:",
+        ":PROPERTIES:",
+        ":AUTHOR: Alice",
+        ":END:",
+      ].join("\n"),
+      "utf8",
+    );
 
     const exitCode = await main([filePath]);
 
@@ -44,6 +54,9 @@ describe("main", () => {
           type: "heading",
           todoKeyword: "TODO",
           tags: ["work"],
+          properties: {
+            AUTHOR: "Alice",
+          },
           children: [{ type: "text", value: "Sample Heading" }],
         },
       ],
@@ -65,6 +78,10 @@ describe("main", () => {
       "#+DATE: 2026-05-06",
       "",
       "* TODO Project *Plan* :work:urgent:",
+      ":PROPERTIES:",
+      ":AUTHOR: Alice",
+      ":PRIORITY: A",
+      ":END:",
       "",
       "- [ ] Research /background/",
       "- [X] Implement =core=",
@@ -96,7 +113,11 @@ describe("main", () => {
       "#+TITLE: Org Mode Parsing",
       "#+DATE: 2026-05-06",
       "",
-      "* TODO Project *Plan*",
+      "* TODO Project *Plan* :work:urgent:",
+      ":PROPERTIES:",
+      ":AUTHOR: Alice",
+      ":PRIORITY: A",
+      ":END:",
       "",
       "- [ ] Research /background/",
       "- [X] Implement =core=",
@@ -120,7 +141,13 @@ describe("main", () => {
         "date: 2026-05-06",
         "---",
         "",
-        "# TODO Project **Plan**",
+        "# TODO Project **Plan** <!-- :work:urgent: -->",
+        "<!--",
+        ":PROPERTIES:",
+        ":AUTHOR: Alice",
+        ":PRIORITY: A",
+        ":END:",
+        "-->",
         "",
         "- [ ] Research *background*",
         "- [x] Implement `core`",

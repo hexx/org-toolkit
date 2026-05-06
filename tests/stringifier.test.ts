@@ -10,6 +10,7 @@ describe("stringify", () => {
         level: 1,
         todoKeyword: "TODO",
         tags: ["work", "urgent"],
+        properties: {},
         children: [
           { type: "text", value: "Heading", position: { start: { index: 0, line: 1, column: 1 }, end: { index: 7, line: 1, column: 8 } } },
         ],
@@ -75,6 +76,7 @@ describe("stringify", () => {
             type: "heading",
             level: 1,
             tags: [],
+            properties: {},
             children: [{ type: "text", value: "Heading", position: { start: { index: 0, line: 1, column: 1 }, end: { index: 7, line: 1, column: 8 } } }],
             position: { start: { index: 0, line: 1, column: 1 }, end: { index: 0, line: 1, column: 1 } },
           },
@@ -85,6 +87,36 @@ describe("stringify", () => {
         },
       }),
     ).toBe(["#+TITLE: Org Mode Parsing", "#+AUTHOR: Alice", "", "* Heading"].join("\n"));
+  });
+
+  it("stringifies heading property drawers", () => {
+    expect(
+      stringify({
+        type: "heading",
+        level: 1,
+        todoKeyword: "TODO",
+        tags: ["work", "urgent"],
+        properties: {
+          AUTHOR: "Alice",
+          PRIORITY: "A",
+        },
+        children: [
+          { type: "text", value: "Heading", position: { start: { index: 0, line: 1, column: 1 }, end: { index: 7, line: 1, column: 8 } } },
+        ],
+        position: {
+          start: { index: 0, line: 1, column: 1 },
+          end: { index: 0, line: 1, column: 1 },
+        },
+      }),
+    ).toBe(
+      [
+        "* TODO Heading :work:urgent:",
+        ":PROPERTIES:",
+        ":AUTHOR: Alice",
+        ":PRIORITY: A",
+        ":END:",
+      ].join("\n"),
+    );
   });
 
   it("stringifies block nodes", () => {
@@ -108,6 +140,10 @@ describe("stringify", () => {
       "#+DATE: 2026-05-06",
       "",
       "* TODO Project *Plan* :work:urgent:",
+      ":PROPERTIES:",
+      ":AUTHOR: Alice",
+      ":PRIORITY: A",
+      ":END:",
       "",
       "- [ ] Research /background/",
       "- [X] Implement =core=",

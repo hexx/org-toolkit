@@ -154,13 +154,13 @@ export function parse(text: string): Root {
       continue;
     }
 
-    const heading = parseHeadingLine(line);
+    const heading = parseHeadingLine(lines, index, text);
     if (heading !== null) {
       flushParagraph();
       flushList();
       flushTable();
-      children.push(heading);
-      index += 1;
+      children.push(heading.heading);
+      index = heading.nextIndex;
       continue;
     }
 
@@ -295,7 +295,21 @@ function parseMetadataLine(line: LineEntry): DocumentMetadata {
   };
 }
 
-function parseHeadingLine(line: LineEntry): Heading | null {
+interface ParsedHeadingLine {
+  readonly heading: Heading;
+  readonly nextIndex: number;
+}
+
+function parseHeadingLine(
+  lines: ReadonlyArray<LineEntry>,
+  startIndex: number,
+  text: string,
+): ParsedHeadingLine | null {
+  const line = lines[startIndex];
+  if (line === undefined) {
+    return null;
+  }
+
   const match = line.text.match(/^(\*+)([ \t]*)(.*)$/);
   if (match === null) {
     return null;
@@ -309,33 +323,82 @@ function parseHeadingLine(line: LineEntry): Heading | null {
   const spaces = match[2] ?? "";
   const level = stars.length;
   const content = match[3] ?? "";
-  const { todoKeyword, rest, restOffset } =
-    splitTodoKeyword(content);
+  const { todoKeyword, rest, restOffset } = splitTodoKeyword(content);
   const { title, tags } = splitTrailingTags(rest);
   const titlePosition =
     title.length === 0
       ? line.position.start
       : createOffsetPosition(line.position.start, stars.length + spaces.length + restOffset);
   const children = parseInline(title, titlePosition);
+  const propertyDrawer = parsePropertyDrawer(lines, startIndex + 1);
+  const properties = propertyDrawer?.properties ?? {};
+  const nextIndex = propertyDrawer?.nextIndex ?? startIndex + 1;
+  const endPosition = propertyDrawer?.endPosition ?? line.position.end;
 
-  if (todoKeyword !== undefined) {
-    return {
-      type: "heading",
-      level,
-      todoKeyword,
-      tags,
-      children,
-      position: line.position,
-    };
-  }
-
-  return {
+  const heading: Heading = {
     type: "heading",
     level,
     tags,
+    properties,
     children,
-    position: line.position,
+    position: {
+      start: line.position.start,
+      end: endPosition,
+    },
+    ...(todoKeyword !== undefined ? { todoKeyword } : {}),
   };
+
+  return {
+    heading,
+    nextIndex,
+  };
+}
+
+interface ParsedPropertyDrawer {
+  readonly properties: Readonly<Record<string, string>>;
+  readonly nextIndex: number;
+  readonly endPosition: Position;
+}
+
+function parsePropertyDrawer(
+  lines: ReadonlyArray<LineEntry>,
+  startIndex: number,
+): ParsedPropertyDrawer | null {
+  const startLine = lines[startIndex];
+  if (startLine === undefined || !/^:PROPERTIES:\s*$/i.test(startLine.text)) {
+    return null;
+  }
+
+  const properties: Record<string, string> = {};
+
+  for (let index = startIndex + 1; index < lines.length; index += 1) {
+    const line = lines[index];
+    if (line === undefined) {
+      break;
+    }
+
+    if (/^:END:\s*$/i.test(line.text)) {
+      return {
+        properties,
+        nextIndex: index + 1,
+        endPosition: line.position.end,
+      };
+    }
+
+    const match = line.text.match(/^:([A-Za-z_]+):[ \t]*(.*)$/i);
+    if (match === null) {
+      throw new OrgParseError("Invalid property drawer line", line.position.start);
+    }
+
+    const key = match[1];
+    if (key === undefined) {
+      throw new OrgParseError("Invalid property drawer line", line.position.start);
+    }
+
+    properties[key.toUpperCase()] = (match[2] ?? "").trim();
+  }
+
+  throw new OrgParseError("Unterminated property drawer", startLine.position.start);
 }
 
 interface ParsedBlockLine {

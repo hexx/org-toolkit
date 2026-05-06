@@ -71,12 +71,18 @@ function render(node: ASTNode, context: RenderContext): string {
 }
 
 function renderRoot(node: Root): string {
-  const parts = [
-    renderFrontmatter(node.metadata),
-    ...node.children.map((child) => render(child, {})),
-  ].filter((part) => part.length > 0);
+  const frontmatter = renderFrontmatter(node.metadata);
+  const children = joinTopLevelChildren(node.children, (child) => render(child, {}));
 
-  return parts.join("\n\n");
+  if (frontmatter.length === 0) {
+    return children;
+  }
+
+  if (children.length === 0) {
+    return frontmatter;
+  }
+
+  return `${frontmatter}\n\n${children}`;
 }
 
 function renderDocumentMetadata(node: DocumentMetadata): string {
@@ -97,10 +103,10 @@ function renderHeading(node: Heading): string {
   const content = renderInline(node.children);
   const prefix = `${"#".repeat(node.level)} ${node.todoKeyword ? `${node.todoKeyword} ` : ""}${content}`.trimEnd();
   if (node.tags.length === 0) {
-    return prefix;
+    return `${prefix}${renderHeadingProperties(node.properties)}`;
   }
 
-  return `${prefix} <!-- :${node.tags.join(":")}: -->`;
+  return `${prefix} <!-- :${node.tags.join(":")}: -->${renderHeadingProperties(node.properties)}`;
 }
 
 function renderParagraph(node: Paragraph, context: RenderContext): string {
@@ -151,6 +157,15 @@ function renderBlock(node: Block): string {
   return content.length > 0 ? `${header}\n${content}\n${footer}` : `${header}\n${footer}`;
 }
 
+function renderHeadingProperties(properties: Readonly<Record<string, string>>): string {
+  if (Object.keys(properties).length === 0) {
+    return "";
+  }
+
+  const lines = Object.entries(properties).map(([key, value]) => `:${key}: ${value}`.trimEnd());
+  return `\n<!--\n${[":PROPERTIES:", ...lines, ":END:"].join("\n")}\n-->`;
+}
+
 function renderTable(node: Table): string {
   const columnCount = node.children.reduce((max, row) => {
     if (row.rowType !== "data") {
@@ -180,6 +195,28 @@ function renderTableCell(node: TableCell): string {
 
 function renderText(node: TextNode): string {
   return node.value;
+}
+
+function joinTopLevelChildren<T extends { readonly type: string }>(
+  children: ReadonlyArray<T>,
+  renderNode: (node: T) => string,
+): string {
+  const rendered: string[] = [];
+
+  children.forEach((child, index) => {
+    const value = renderNode(child);
+    if (value.length === 0) {
+      return;
+    }
+
+    if (rendered.length > 0) {
+      rendered.push("\n\n");
+    }
+
+    rendered.push(value);
+  });
+
+  return rendered.join("");
 }
 
 function renderInline(nodes: ReadonlyArray<InlineNode>): string {

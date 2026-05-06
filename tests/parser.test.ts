@@ -14,6 +14,7 @@ describe("parse", () => {
           level: 1,
           todoKeyword: "TODO",
           tags: ["work", "urgent"],
+          properties: {},
           children: [
             {
               type: "text",
@@ -37,6 +38,36 @@ describe("parse", () => {
     });
   });
 
+  it("parses heading property drawers into heading properties", () => {
+    const input = [
+      "* TODO My First Heading :work:urgent:",
+      ":PROPERTIES:",
+      ":AUTHOR: Alice",
+      ":PRIORITY: A",
+      ":END:",
+      "",
+      "This is the content.",
+    ].join("\n");
+
+    expect(parse(input)).toMatchObject({
+      children: [
+        {
+          type: "heading",
+          todoKeyword: "TODO",
+          tags: ["work", "urgent"],
+          properties: {
+            AUTHOR: "Alice",
+            PRIORITY: "A",
+          },
+        },
+        {
+          type: "paragraph",
+          children: [{ type: "text", value: "This is the content." }],
+        },
+      ],
+    });
+  });
+
   it("parses document metadata into root metadata", () => {
     const input = [
       "#+TITLE: Org Mode Parsing",
@@ -55,6 +86,7 @@ describe("parse", () => {
       children: [
         {
           type: "heading",
+          properties: {},
           children: [{ type: "text", value: "Heading" }],
         },
       ],
