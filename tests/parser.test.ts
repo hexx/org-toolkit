@@ -130,4 +130,49 @@ describe("parse", () => {
       ],
     });
   });
+
+  it("parses org tables into a single table node", () => {
+    const ast = parse(
+      "| Name  | Age | Role      |\n|-------+-----+-----------|\n| Alice | 24  | Engineer  |\n| Bob   | 30  | Designer  |",
+    );
+
+    expect(ast.children).toHaveLength(1);
+    expect(ast.children[0]).toMatchObject({
+      type: "table",
+      children: [
+        {
+          type: "table-row",
+          rowType: "data",
+          children: [
+            { type: "table-cell", value: "Name" },
+            { type: "table-cell", value: "Age" },
+            { type: "table-cell", value: "Role" },
+          ],
+        },
+        {
+          type: "table-row",
+          rowType: "separator",
+          children: [],
+        },
+        {
+          type: "table-row",
+          rowType: "data",
+          children: [
+            { type: "table-cell", value: "Alice" },
+            { type: "table-cell", value: "24" },
+            { type: "table-cell", value: "Engineer" },
+          ],
+        },
+        {
+          type: "table-row",
+          rowType: "data",
+          children: [
+            { type: "table-cell", value: "Bob" },
+            { type: "table-cell", value: "30" },
+            { type: "table-cell", value: "Designer" },
+          ],
+        },
+      ],
+    });
+  });
 });
