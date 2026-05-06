@@ -31,7 +31,7 @@ export function rememberBlankLinesAfter(node: object, blankLines: number): void 
 }
 
 export function readBlankLinesAfter(node: object): number | undefined {
-  const value = (node as HiddenObject)[BLANK_LINES_AFTER_KEY];
+  const value = (node as unknown as HiddenObject)[BLANK_LINES_AFTER_KEY];
   return typeof value === "number" ? value : undefined;
 }
 
@@ -45,6 +45,6 @@ function defineHiddenValue(target: object, key: string, value: unknown): void {
 }
 
 function readHiddenString(target: object, key: string): string | undefined {
-  const value = (target as HiddenObject)[key];
+  const value = (target as unknown as HiddenObject)[key];
   return typeof value === "string" ? value : undefined;
 }
