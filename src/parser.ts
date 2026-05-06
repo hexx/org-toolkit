@@ -7,6 +7,7 @@ import type {
   SourceRange,
   Text,
 } from "./ast.js";
+import { OrgParseError } from "./errors.js";
 
 interface LineEntry {
   readonly text: string;
@@ -104,6 +105,29 @@ export function parse(text: string): Root {
   };
 }
 
+/**
+ * A compatibility wrapper that exposes `Parser.parse()` as requested by the
+ * CLI milestone.
+ *
+ * @example
+ * ```ts
+ * const ast = Parser.parse("* TODO Heading");
+ * ```
+ */
+export class Parser {
+  /**
+   * Parse org-mode text into a root AST.
+   *
+   * @example
+   * ```ts
+   * const ast = Parser.parse("* TODO Heading");
+   * ```
+   */
+  public static parse(text: string): Root {
+    return parse(text);
+  }
+}
+
 function collectLineEntries(text: string): ReadonlyArray<LineEntry> {
   const entries: LineEntry[] = [];
   let lineStartIndex = 0;
@@ -149,16 +173,12 @@ function collectLineEntries(text: string): ReadonlyArray<LineEntry> {
 function parseMetadataLine(line: LineEntry): DocumentMetadata {
   const match = line.text.match(/^#\+([A-Za-z0-9_-]+):[ \t]*(.*)$/);
   if (match === null) {
-    throw new Error(
-      `Invalid metadata line at ${describePosition(line.position.start)}`,
-    );
+    throw new OrgParseError("Invalid metadata line", line.position.start);
   }
 
   const key = match[1];
   if (key === undefined) {
-    throw new Error(
-      `Invalid metadata line at ${describePosition(line.position.start)}`,
-    );
+    throw new OrgParseError("Invalid metadata line", line.position.start);
   }
 
   return {
@@ -290,8 +310,4 @@ function createPosition(
   column: number,
 ): Position {
   return { index, line, column };
-}
-
-function describePosition(position: Position): string {
-  return `line ${position.line}, column ${position.column}`;
 }
