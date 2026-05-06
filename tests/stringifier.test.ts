@@ -119,6 +119,19 @@ describe("stringify", () => {
     );
   });
 
+  it("stringifies planning lines and inline timestamps", () => {
+    const input = [
+      "* TODO Prepare presentation",
+      "SCHEDULED: <2026-05-10 Sun> DEADLINE: <2026-05-12 Tue 10:00>",
+      "Meeting is set for [2026-05-08 Fri 15:00].",
+    ].join("\n");
+
+    const ast = parse(input);
+
+    expect(stringify(ast)).toBe(input);
+    expect(parse(stringify(ast))).toEqual(ast);
+  });
+
   it("stringifies block nodes", () => {
     expect(
       stringify({

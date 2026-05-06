@@ -68,6 +68,55 @@ describe("parse", () => {
     });
   });
 
+  it("parses planning lines and inline timestamps", () => {
+    const input = [
+      "* TODO Prepare presentation",
+      "SCHEDULED: <2026-05-10 Sun> DEADLINE: <2026-05-12 Tue 10:00>",
+      "Meeting is set for [2026-05-08 Fri 15:00].",
+    ].join("\n");
+
+    expect(parse(input)).toMatchObject({
+      children: [
+        {
+          type: "heading",
+          todoKeyword: "TODO",
+          planning: {
+            scheduled: {
+              type: "timestamp",
+              isActive: true,
+              year: 2026,
+              month: 5,
+              day: 10,
+            },
+            deadline: {
+              type: "timestamp",
+              isActive: true,
+              year: 2026,
+              month: 5,
+              day: 12,
+              time: "10:00",
+            },
+          },
+        },
+        {
+          type: "paragraph",
+          children: [
+            { type: "text", value: "Meeting is set for " },
+            {
+              type: "timestamp",
+              isActive: false,
+              year: 2026,
+              month: 5,
+              day: 8,
+              time: "15:00",
+            },
+            { type: "text", value: "." },
+          ],
+        },
+      ],
+    });
+  });
+
   it("parses document metadata into root metadata", () => {
     const input = [
       "#+TITLE: Org Mode Parsing",
