@@ -1,6 +1,10 @@
 import type {
   DocumentMetadata,
   Heading,
+  List,
+  ListItem,
+  ListItemCheckboxState,
+  ListKind,
   Paragraph,
   Position,
   Root,
@@ -12,6 +16,11 @@ import { OrgParseError } from "./errors.js";
 interface LineEntry {
   readonly text: string;
   readonly position: SourceRange;
+}
+
+interface ParsedListItemLine {
+  readonly kind: ListKind;
+  readonly item: ListItem;
 }
 
 const TODO_KEYWORDS = new Set([
@@ -38,8 +47,10 @@ const TODO_KEYWORDS = new Set([
 export function parse(text: string): Root {
   const lines = collectLineEntries(text);
   const metadata: DocumentMetadata[] = [];
-  const children: Array<Heading | Paragraph> = [];
+  const children: Array<Heading | Paragraph | List> = [];
   let paragraphBuffer: LineEntry[] = [];
+  let listBuffer: ListItem[] = [];
+  let listKind: ListKind | null = null;
 
   const flushParagraph = (): void => {
     if (paragraphBuffer.length === 0) {
@@ -67,14 +78,36 @@ export function parse(text: string): Root {
     paragraphBuffer = [];
   };
 
+  const flushList = (): void => {
+    if (listBuffer.length === 0 || listKind === null) {
+      return;
+    }
+
+    const first = listBuffer[0]!;
+    const last = listBuffer[listBuffer.length - 1]!;
+    children.push({
+      type: "list",
+      kind: listKind,
+      children: [...listBuffer],
+      position: {
+        start: first.position.start,
+        end: last.position.end,
+      },
+    });
+    listBuffer = [];
+    listKind = null;
+  };
+
   for (const line of lines) {
     if (isBlankLine(line.text)) {
       flushParagraph();
+      flushList();
       continue;
     }
 
     if (isMetadataLine(line.text)) {
       flushParagraph();
+      flushList();
       metadata.push(parseMetadataLine(line));
       continue;
     }
@@ -82,14 +115,29 @@ export function parse(text: string): Root {
     const heading = parseHeadingLine(line);
     if (heading !== null) {
       flushParagraph();
+      flushList();
       children.push(heading);
       continue;
     }
 
+    const listItemLine = parseListItemLine(line);
+    if (listItemLine !== null) {
+      flushParagraph();
+      if (listKind !== null && listKind !== listItemLine.kind) {
+        flushList();
+      }
+
+      listBuffer = [...listBuffer, listItemLine.item];
+      listKind = listItemLine.kind;
+      continue;
+    }
+
+    flushList();
     paragraphBuffer = [...paragraphBuffer, line];
   }
 
   flushParagraph();
+  flushList();
 
   const start = lines[0]?.position.start ?? createPosition(0, 1, 1);
   const end = lines[lines.length - 1]?.position.end ?? createPosition(0, 1, 1);
@@ -228,6 +276,63 @@ function parseHeadingLine(line: LineEntry): Heading | null {
   };
 }
 
+function parseListItemLine(line: LineEntry): ParsedListItemLine | null {
+  const match = line.text.match(/^(\s*)([-+]|\d+[.)])([ \t]+)(.*)$/);
+  if (match === null) {
+    return null;
+  }
+
+  const leadingWhitespace = match[1] ?? "";
+  const marker = match[2];
+  if (marker === undefined) {
+    return null;
+  }
+  const separator = match[3] ?? "";
+  const remainder = match[4] ?? "";
+  const kind: ListKind = /^[0-9]/.test(marker) ? "ordered" : "unordered";
+
+  const checkboxMatch = remainder.match(/^(\[(?: |X|x)\])([ \t]+)?(.*)$/);
+  let checkbox: ListItemCheckboxState = null;
+  let content = remainder;
+  let checkboxLength = 0;
+
+  if (checkboxMatch !== null) {
+    const rawCheckbox = checkboxMatch[1];
+    if (rawCheckbox === undefined) {
+      return null;
+    }
+    checkboxLength = rawCheckbox.length + (checkboxMatch[2]?.length ?? 0);
+    content = checkboxMatch[3] ?? "";
+    checkbox = rawCheckbox === "[ ]" ? "unchecked" : "checked";
+  }
+
+  const contentOffset =
+    leadingWhitespace.length + marker.length + separator.length + checkboxLength;
+  const children: Array<Text | Paragraph | List> = [];
+
+  if (content.length > 0) {
+    children.push({
+      type: "text",
+      value: content,
+      position: {
+        start: createOffsetPosition(line.position.start, contentOffset),
+        end: createOffsetPosition(line.position.start, contentOffset + content.length),
+      },
+    });
+  }
+
+  return {
+    kind,
+    item: {
+      type: "list-item",
+      marker,
+      checkbox,
+      children,
+      position: line.position,
+    },
+  };
+}
+
 function splitTodoKeyword(content: string): {
   readonly todoKeyword?: string;
   readonly title: string;
@@ -310,4 +415,12 @@ function createPosition(
   column: number,
 ): Position {
   return { index, line, column };
+}
+
+function createOffsetPosition(position: Position, offset: number): Position {
+  return {
+    index: position.index + offset,
+    line: position.line,
+    column: position.column + offset,
+  };
 }

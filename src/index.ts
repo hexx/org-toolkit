@@ -1,6 +1,10 @@
 export type {
   DocumentMetadata,
   Heading,
+  List,
+  ListItem,
+  ListItemCheckboxState,
+  ListKind,
   Paragraph,
   Position,
   Root,

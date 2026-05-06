@@ -28,4 +28,106 @@ describe("parse", () => {
       },
     });
   });
+
+  it("parses unordered lists into a single list node", () => {
+    const ast = parse("- Item A\n+ Item B");
+
+    expect(ast.children).toHaveLength(1);
+    expect(ast.children[0]).toMatchObject({
+      type: "list",
+      kind: "unordered",
+      children: [
+        {
+          type: "list-item",
+          marker: "-",
+          checkbox: null,
+          children: [
+            {
+              type: "text",
+              value: "Item A",
+            },
+          ],
+        },
+        {
+          type: "list-item",
+          marker: "+",
+          checkbox: null,
+          children: [
+            {
+              type: "text",
+              value: "Item B",
+            },
+          ],
+        },
+      ],
+    });
+  });
+
+  it("parses ordered lists into a single list node", () => {
+    const ast = parse("1. First\n2) Second");
+
+    expect(ast.children).toHaveLength(1);
+    expect(ast.children[0]).toMatchObject({
+      type: "list",
+      kind: "ordered",
+      children: [
+        {
+          type: "list-item",
+          marker: "1.",
+          checkbox: null,
+          children: [
+            {
+              type: "text",
+              value: "First",
+            },
+          ],
+        },
+        {
+          type: "list-item",
+          marker: "2)",
+          checkbox: null,
+          children: [
+            {
+              type: "text",
+              value: "Second",
+            },
+          ],
+        },
+      ],
+    });
+  });
+
+  it("parses checkbox list items", () => {
+    const ast = parse("- [ ] Todo\n- [X] Done");
+
+    expect(ast.children).toHaveLength(1);
+    expect(ast.children[0]).toMatchObject({
+      type: "list",
+      kind: "unordered",
+      children: [
+        {
+          type: "list-item",
+          marker: "-",
+          checkbox: "unchecked",
+          children: [
+            {
+              type: "text",
+              value: "Todo",
+            },
+          ],
+        },
+        {
+          type: "list-item",
+          marker: "-",
+          checkbox: "checked",
+          children: [
+            {
+              type: "text",
+              value: "Done",
+            },
+          ],
+        },
+      ],
+    });
+  });
 });
