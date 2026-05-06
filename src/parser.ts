@@ -7,6 +7,7 @@ import type {
   ListItem,
   ListItemCheckboxState,
   ListKind,
+  LinkNode,
   Paragraph,
   Position,
   Root,
@@ -639,6 +640,15 @@ function parseInline(text: string, startPosition: Position): ReadonlyArray<Inlin
   };
 
   while (index < text.length) {
+    const link = parseLink(text, startPosition, index);
+    if (link !== null) {
+      flushText(index);
+      nodes.push(link.node);
+      index = link.nextIndex;
+      textStart = index;
+      continue;
+    }
+
     const marker = text[index];
     if (marker === undefined || !isInlineDelimiter(marker)) {
       index += 1;
@@ -732,4 +742,51 @@ function parseInline(text: string, startPosition: Position): ReadonlyArray<Inlin
 
 function isInlineDelimiter(character: string): boolean {
   return character === "*" || character === "/" || character === "_" || character === "+" || character === "=" || character === "~";
+}
+
+interface ParsedLink {
+  readonly node: LinkNode;
+  readonly nextIndex: number;
+}
+
+function parseLink(
+  text: string,
+  startPosition: Position,
+  index: number,
+): ParsedLink | null {
+  if (text[index] !== "[" || text[index + 1] !== "[") {
+    return null;
+  }
+
+  const closingIndex = text.indexOf("]]", index + 2);
+  if (closingIndex === -1) {
+    return null;
+  }
+
+  const inside = text.slice(index + 2, closingIndex);
+  const separatorIndex = inside.indexOf("][");
+  const url = separatorIndex === -1 ? inside : inside.slice(0, separatorIndex);
+  const descriptionText = separatorIndex === -1 ? undefined : inside.slice(separatorIndex + 2);
+  const nodeStart = createOffsetPosition(startPosition, index);
+  const nodeEnd = createOffsetPosition(startPosition, closingIndex + 2);
+  const description =
+    descriptionText === undefined
+      ? undefined
+      : parseInline(
+          descriptionText,
+          createOffsetPosition(startPosition, index + 2 + (separatorIndex === -1 ? 0 : separatorIndex + 2)),
+        );
+
+  return {
+    node: {
+      type: "link",
+      url,
+      description,
+      position: {
+        start: nodeStart,
+        end: nodeEnd,
+      },
+    },
+    nextIndex: closingIndex + 2,
+  };
 }

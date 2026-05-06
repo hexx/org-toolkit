@@ -42,6 +42,26 @@ describe("stringify", () => {
     ).toBe("A *bold* text");
   });
 
+  it("stringifies link nodes", () => {
+    expect(
+      stringify({
+        type: "link",
+        url: "https://github.com",
+        description: [
+          {
+            type: "bold",
+            children: [{ type: "text", value: "GitHub", position: { start: { index: 0, line: 1, column: 1 }, end: { index: 6, line: 1, column: 7 } } }],
+            position: { start: { index: 0, line: 1, column: 1 }, end: { index: 8, line: 1, column: 9 } },
+          },
+        ],
+        position: {
+          start: { index: 0, line: 1, column: 1 },
+          end: { index: 0, line: 1, column: 1 },
+        },
+      }),
+    ).toBe("[[https://github.com][*GitHub*]]");
+  });
+
   it("stringifies block nodes", () => {
     expect(
       stringify({
@@ -63,6 +83,8 @@ describe("stringify", () => {
       "",
       "- [ ] Research /background/",
       "- [X] Implement =core=",
+      "",
+      "See [[https://github.com][*GitHub*]] now",
       "",
       "#+BEGIN_SRC typescript",
       "console.log('hi');",

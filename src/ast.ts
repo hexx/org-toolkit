@@ -133,6 +133,7 @@ export type InlineNode =
   | UnderlineNode
   | CodeNode
   | VerbatimNode
+  | LinkNode
   | StrikeThroughNode;
 
 /**
@@ -405,6 +406,15 @@ export interface CodeNode extends NodeBase {
 export interface VerbatimNode extends NodeBase {
   readonly type: "verbatim";
   readonly value: string;
+}
+
+/**
+ * A link inline node with a URL and optional inline description.
+ */
+export interface LinkNode extends NodeBase {
+  readonly type: "link";
+  readonly url: string;
+  readonly description: ReadonlyArray<InlineNode> | undefined;
 }
 
 /**

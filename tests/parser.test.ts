@@ -106,6 +106,29 @@ describe("parse", () => {
     });
   });
 
+  it("parses links with inline descriptions", () => {
+    const ast = parse("See [[https://github.com][*GitHub*]] now");
+
+    expect(ast.children).toHaveLength(1);
+    expect(ast.children[0]).toMatchObject({
+      type: "paragraph",
+      children: [
+        { type: "text", value: "See " },
+        {
+          type: "link",
+          url: "https://github.com",
+          description: [
+            {
+              type: "bold",
+              children: [{ type: "text", value: "GitHub" }],
+            },
+          ],
+        },
+        { type: "text", value: " now" },
+      ],
+    });
+  });
+
   it("parses case-insensitive source blocks", () => {
     const input = ["#+begin_src typescript", "console.log('hi');", "#+end_src"].join("\n");
 

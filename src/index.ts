@@ -11,6 +11,7 @@ export type {
   ListItem,
   ListItemCheckboxState,
   ListKind,
+  LinkNode,
   Paragraph,
   Position,
   Table,
