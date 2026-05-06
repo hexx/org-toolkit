@@ -63,6 +63,10 @@ describe("main", () => {
       "- [ ] Research /background/",
       "- [X] Implement =core=",
       "",
+      "#+BEGIN_SRC typescript",
+      "console.log('hi');",
+      "#+END_SRC",
+      "",
       "| Name  | Age | Role     |",
       "|-----+---+--------|",
       "| Alice | 24  | Engineer |",
@@ -85,6 +89,10 @@ describe("main", () => {
       "",
       "- [ ] Research /background/",
       "- [X] Implement =core=",
+      "",
+      "#+BEGIN_SRC typescript",
+      "console.log('hi');",
+      "#+END_SRC",
     ].join("\n");
     await writeFile(filePath, source, "utf8");
 
@@ -98,6 +106,10 @@ describe("main", () => {
         "",
         "- [ ] Research *background*",
         "- [x] Implement `core`",
+        "",
+        "```typescript",
+        "console.log('hi');",
+        "```",
       ].join("\n"),
     );
   });

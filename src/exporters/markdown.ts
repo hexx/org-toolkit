@@ -1,5 +1,6 @@
 import type {
   ASTNode,
+  Block,
   DocumentMetadata,
   InlineNode,
   Heading,
@@ -44,6 +45,8 @@ function render(node: ASTNode, context: RenderContext): string {
       return renderList(node);
     case "list-item":
       return renderListItem(node, context);
+    case "block":
+      return renderBlock(node);
     case "table":
       return renderTable(node);
     case "table-row":
@@ -114,6 +117,27 @@ function renderListItem(node: ListItem, context: RenderContext): string {
   return `${marker}${checkbox} ${content}`;
 }
 
+function renderBlock(node: Block): string {
+  if (node.blockName === "SRC") {
+    const language = node.parameters.trim();
+    const fence = language.length > 0 ? `\`\`\`${language}` : "```";
+    const content = stripBlockBoundaryNewlines(node.content);
+    return content.length > 0 ? `${fence}\n${content}\n\`\`\`` : `${fence}\n\`\`\``;
+  }
+
+  if (node.blockName === "QUOTE") {
+    const lines = splitBlockContentLines(node.content).map((line) =>
+      line.length > 0 ? `> ${line}` : ">",
+    );
+    return lines.length > 0 ? lines.join("\n") : ">";
+  }
+
+  const header = `<!-- #+BEGIN_${node.blockName}${node.parameters.length > 0 ? ` ${node.parameters}` : ""} -->`;
+  const footer = `<!-- #+END_${node.blockName} -->`;
+  const content = stripBlockBoundaryNewlines(node.content);
+  return content.length > 0 ? `${header}\n${content}\n${footer}` : `${header}\n${footer}`;
+}
+
 function renderTable(node: Table): string {
   const columnCount = node.children.reduce((max, row) => {
     if (row.rowType !== "data") {
@@ -177,6 +201,34 @@ function renderCodeSpan(value: string): string {
     value.startsWith(" ") || value.endsWith(" ") || value.startsWith("`") || value.endsWith("`");
   const content = needsPadding ? ` ${value} ` : value;
   return `${fence}${content}${fence}`;
+}
+
+function stripBlockBoundaryNewlines(content: string): string {
+  let start = 0;
+  let end = content.length;
+
+  if (content.startsWith("\r\n")) {
+    start = 2;
+  } else if (content.startsWith("\n") || content.startsWith("\r")) {
+    start = 1;
+  }
+
+  if (content.endsWith("\r\n")) {
+    end -= 2;
+  } else if (content.endsWith("\n") || content.endsWith("\r")) {
+    end -= 1;
+  }
+
+  return content.slice(start, Math.max(start, end));
+}
+
+function splitBlockContentLines(content: string): ReadonlyArray<string> {
+  const normalized = stripBlockBoundaryNewlines(content);
+  if (normalized.length === 0) {
+    return [];
+  }
+
+  return normalized.split(/\r?\n/);
 }
 
 function assertNever(value: never): never {

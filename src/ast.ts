@@ -63,7 +63,7 @@ export interface NodeBase {
 export interface Root extends NodeBase {
   readonly type: "root";
   readonly metadata: ReadonlyArray<DocumentMetadata>;
-  readonly children: ReadonlyArray<Heading | Paragraph | List | Table>;
+  readonly children: ReadonlyArray<Heading | Paragraph | List | Block | Table>;
 }
 
 /**
@@ -243,6 +243,33 @@ export interface ListItem extends NodeBase {
 }
 
 /**
+ * A block element such as `#+BEGIN_SRC` or `#+BEGIN_QUOTE`.
+ *
+ * The parser keeps the block name normalized to uppercase while preserving the
+ * raw content string between the begin and end markers.
+ *
+ * @example
+ * ```ts
+ * const block: Block = {
+ *   type: "block",
+ *   blockName: "SRC",
+ *   parameters: "typescript",
+ *   content: "\nconsole.log('hi');\n",
+ *   position: {
+ *     start: { index: 0, line: 1, column: 1 },
+ *     end: { index: 42, line: 3, column: 19 },
+ *   },
+ * };
+ * ```
+ */
+export interface Block extends NodeBase {
+  readonly type: "block";
+  readonly blockName: string;
+  readonly parameters: string;
+  readonly content: string;
+}
+
+/**
  * The kind of a table row.
  *
  * @example
@@ -410,6 +437,7 @@ export type ASTNode =
   | Paragraph
   | List
   | ListItem
+  | Block
   | Table
   | TableRow
   | TableCell
