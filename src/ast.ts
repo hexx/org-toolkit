@@ -63,7 +63,9 @@ export interface NodeBase {
 export interface Root extends NodeBase {
   readonly type: "root";
   readonly metadata: Readonly<Record<string, string>>;
-  readonly children: ReadonlyArray<Heading | Paragraph | List | Block | Table>;
+  readonly children: ReadonlyArray<
+    Heading | Paragraph | List | Block | Table | FootnoteDefinitionNode | CommentNode
+  >;
 }
 
 /**
@@ -134,6 +136,7 @@ export type InlineNode =
   | CodeNode
   | VerbatimNode
   | LinkNode
+  | FootnoteReferenceNode
   | TimestampNode
   | StrikeThroughNode;
 
@@ -422,6 +425,71 @@ export interface LinkNode extends NodeBase {
 }
 
 /**
+ * A footnote reference inline node such as `[fn:1]`.
+ *
+ * @example
+ * ```ts
+ * const ref: FootnoteReferenceNode = {
+ *   type: "footnote-reference",
+ *   label: "1",
+ *   position: {
+ *     start: { index: 0, line: 1, column: 1 },
+ *     end: { index: 6, line: 1, column: 7 },
+ *   },
+ * };
+ * ```
+ */
+export interface FootnoteReferenceNode extends NodeBase {
+  readonly type: "footnote-reference";
+  readonly label: string;
+}
+
+/**
+ * A footnote definition block such as `[fn:1] Description`.
+ *
+ * @example
+ * ```ts
+ * const def: FootnoteDefinitionNode = {
+ *   type: "footnote-definition",
+ *   label: "1",
+ *   children: [{ type: "text", value: "Description", position: {
+ *     start: { index: 7, line: 1, column: 8 },
+ *     end: { index: 18, line: 1, column: 19 },
+ *   }}],
+ *   position: {
+ *     start: { index: 0, line: 1, column: 1 },
+ *     end: { index: 18, line: 1, column: 19 },
+ *   },
+ * };
+ * ```
+ */
+export interface FootnoteDefinitionNode extends NodeBase {
+  readonly type: "footnote-definition";
+  readonly label: string;
+  readonly children: ReadonlyArray<InlineNode>;
+}
+
+/**
+ * A comment line such as `# Note`.
+ *
+ * @example
+ * ```ts
+ * const comment: CommentNode = {
+ *   type: "comment",
+ *   content: "Note",
+ *   position: {
+ *     start: { index: 0, line: 1, column: 1 },
+ *     end: { index: 6, line: 1, column: 7 },
+ *   },
+ * };
+ * ```
+ */
+export interface CommentNode extends NodeBase {
+  readonly type: "comment";
+  readonly content: string;
+}
+
+/**
  * Strikethrough inline text.
  */
 export interface StrikeThroughNode extends NodeBase {
@@ -510,4 +578,6 @@ export type ASTNode =
   | Table
   | TableRow
   | TableCell
+  | FootnoteDefinitionNode
+  | CommentNode
   | InlineNode;

@@ -117,6 +117,46 @@ describe("parse", () => {
     });
   });
 
+  it("parses comments and footnotes", () => {
+    const input = [
+      "  # Comment about the doc",
+      "See [fn:1] for details.",
+      "[fn:1] Footnote *detail*.",
+    ].join("\n");
+
+    expect(parse(input)).toMatchObject({
+      children: [
+        {
+          type: "comment",
+          content: "Comment about the doc",
+        },
+        {
+          type: "paragraph",
+          children: [
+            { type: "text", value: "See " },
+            {
+              type: "footnote-reference",
+              label: "1",
+            },
+            { type: "text", value: " for details." },
+          ],
+        },
+        {
+          type: "footnote-definition",
+          label: "1",
+          children: [
+            { type: "text", value: "Footnote " },
+            {
+              type: "bold",
+              children: [{ type: "text", value: "detail" }],
+            },
+            { type: "text", value: "." },
+          ],
+        },
+      ],
+    });
+  });
+
   it("parses document metadata into root metadata", () => {
     const input = [
       "#+TITLE: Org Mode Parsing",

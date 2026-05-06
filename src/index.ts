@@ -1,9 +1,12 @@
 export type {
   ASTNode,
+  CommentNode,
   Block,
   BoldNode,
   CodeNode,
   DocumentMetadata,
+  FootnoteDefinitionNode,
+  FootnoteReferenceNode,
   InlineNode,
   Heading,
   ItalicNode,

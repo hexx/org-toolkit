@@ -102,4 +102,22 @@ describe("toMarkdown", () => {
       ].join("\n"),
     );
   });
+
+  it("renders footnotes and ignores comments", () => {
+    const input = [
+      "# Comment about the doc",
+      "",
+      "See [fn:1] for details.",
+      "",
+      "[fn:1] Footnote *detail*.",
+    ].join("\n");
+
+    expect(toMarkdown(parse(input))).toBe(
+      [
+        "See [^1] for details.",
+        "",
+        "[^1]: Footnote **detail**.",
+      ].join("\n"),
+    );
+  });
 });

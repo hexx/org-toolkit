@@ -1,7 +1,10 @@
 import type {
   ASTNode,
   Block,
+  CommentNode,
   DocumentMetadata,
+  FootnoteDefinitionNode,
+  FootnoteReferenceNode,
   InlineNode,
   Heading,
   List,
@@ -48,6 +51,8 @@ export function stringify(node: ASTNode): string {
       return stringifyListItem(node);
     case "block":
       return stringifyBlock(node);
+    case "comment":
+      return stringifyComment(node);
     case "table":
       return stringifyTable(node);
     case "table-row":
@@ -65,6 +70,10 @@ export function stringify(node: ASTNode): string {
       return stringifyInlineNode(node);
     case "link":
       return stringifyLink(node);
+    case "footnote-reference":
+      return stringifyFootnoteReference(node);
+    case "footnote-definition":
+      return stringifyFootnoteDefinition(node);
     case "timestamp":
       return stringifyTimestamp(node);
     default:
@@ -139,6 +148,10 @@ function stringifyBlock(node: Block): string {
   const begin = `#+BEGIN_${node.blockName}${node.parameters.length > 0 ? ` ${node.parameters}` : ""}`;
   const end = `#+END_${node.blockName}`;
   return `${begin}${node.content}${end}`;
+}
+
+function stringifyComment(node: CommentNode): string {
+  return `# ${node.content}`;
 }
 
 function stringifyPropertyDrawer(properties: Readonly<Record<string, string>>): string {
@@ -249,6 +262,15 @@ function stringifyTimestamp(node: TimestampNode): string {
   return `${open}${parts.join(" ")}${close}`;
 }
 
+function stringifyFootnoteReference(node: FootnoteReferenceNode): string {
+  return `[fn:${node.label}]`;
+}
+
+function stringifyFootnoteDefinition(node: FootnoteDefinitionNode): string {
+  const content = stringifyInline(node.children);
+  return content.length > 0 ? `[fn:${node.label}] ${content}` : `[fn:${node.label}]`;
+}
+
 function joinTopLevelChildren<T extends { readonly type: string }>(
   children: ReadonlyArray<T>,
   renderNode: (node: T) => string,
@@ -292,6 +314,8 @@ function stringifyInlineNode(node: InlineNode): string {
       return `~${node.value}~`;
     case "link":
       return stringifyLink(node);
+    case "footnote-reference":
+      return stringifyFootnoteReference(node);
     case "timestamp":
       return stringifyTimestamp(node);
     default:

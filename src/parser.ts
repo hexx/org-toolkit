@@ -1,6 +1,9 @@
 import type {
   Block,
+  CommentNode,
   DocumentMetadata,
+  FootnoteDefinitionNode,
+  FootnoteReferenceNode,
   InlineNode,
   Heading,
   List,
@@ -25,6 +28,8 @@ import {
   rememberHeadingPlanningLines,
   rememberTimestampText,
 } from "./node-annotations.js";
+
+type TopLevelNode = Heading | Paragraph | List | Block | Table | FootnoteDefinitionNode | CommentNode;
 
 interface LineEntry {
   readonly text: string;
@@ -65,14 +70,14 @@ const TODO_KEYWORDS = new Set([
 export function parse(text: string): Root {
   const lines = collectLineEntries(text);
   const metadata: Record<string, string> = {};
-  const children: Array<Heading | Paragraph | List | Block | Table> = [];
+  const children: TopLevelNode[] = [];
   let paragraphBuffer: LineEntry[] = [];
   let listBuffer: ListItem[] = [];
   let listKind: ListKind | null = null;
   let tableBuffer: TableRow[] = [];
   let pendingBlankLines = 0;
 
-  const pushChild = (child: Heading | Paragraph | List | Block | Table): void => {
+  const pushChild = (child: TopLevelNode): void => {
     if (children.length > 0) {
       rememberBlankLinesAfter(children[children.length - 1]!, pendingBlankLines);
     }
@@ -179,6 +184,26 @@ export function parse(text: string): Root {
       flushTable();
       pushChild(heading.heading);
       index = heading.nextIndex;
+      continue;
+    }
+
+    const footnoteDefinition = parseFootnoteDefinitionLine(line);
+    if (footnoteDefinition !== null) {
+      flushParagraph();
+      flushList();
+      flushTable();
+      pushChild(footnoteDefinition);
+      index += 1;
+      continue;
+    }
+
+    const comment = parseCommentLine(line);
+    if (comment !== null) {
+      flushParagraph();
+      flushList();
+      flushTable();
+      pushChild(comment);
+      index += 1;
       continue;
     }
 
@@ -603,6 +628,41 @@ function parseBlockLine(
   throw new OrgParseError(`Unterminated block: ${blockName}`, line.position.start);
 }
 
+function parseFootnoteDefinitionLine(line: LineEntry): FootnoteDefinitionNode | null {
+  const match = line.text.match(/^\[fn:([^\]]+)\]\s*(.*)$/);
+  if (match === null) {
+    return null;
+  }
+
+  const label = match[1];
+  if (label === undefined || label.length === 0) {
+    return null;
+  }
+
+  const description = match[2] ?? "";
+  const descriptionOffset = line.text.length - description.length;
+
+  return {
+    type: "footnote-definition",
+    label,
+    children: parseInline(description, createOffsetPosition(line.position.start, descriptionOffset)),
+    position: line.position,
+  };
+}
+
+function parseCommentLine(line: LineEntry): CommentNode | null {
+  const match = line.text.match(/^[ \t]*# (.*)$/);
+  if (match === null) {
+    return null;
+  }
+
+  return {
+    type: "comment",
+    content: match[1] ?? "",
+    position: line.position,
+  };
+}
+
 function parseListItemLine(line: LineEntry): ParsedListItemLine | null {
   const match = line.text.match(/^(\s*)([-+]|\d+[.)])([ \t]+)(.*)$/);
   if (match === null) {
@@ -844,6 +904,15 @@ function parseInline(text: string, startPosition: Position): ReadonlyArray<Inlin
   };
 
   while (index < text.length) {
+    const footnoteReference = parseFootnoteReferenceAt(text, startPosition, index);
+    if (footnoteReference !== null) {
+      flushText(index);
+      nodes.push(footnoteReference.node);
+      index = footnoteReference.nextIndex;
+      textStart = index;
+      continue;
+    }
+
     const timestamp = parseTimestampAt(text, startPosition, index);
     if (timestamp !== null) {
       flushText(index);
@@ -956,6 +1025,43 @@ function parseInline(text: string, startPosition: Position): ReadonlyArray<Inlin
 interface ParsedTimestamp {
   readonly node: TimestampNode;
   readonly nextIndex: number;
+}
+
+interface ParsedFootnoteReference {
+  readonly node: FootnoteReferenceNode;
+  readonly nextIndex: number;
+}
+
+function parseFootnoteReferenceAt(
+  text: string,
+  startPosition: Position,
+  index: number,
+): ParsedFootnoteReference | null {
+  if (!text.startsWith("[fn:", index)) {
+    return null;
+  }
+
+  const closingIndex = text.indexOf("]", index + 4);
+  if (closingIndex === -1) {
+    return null;
+  }
+
+  const label = text.slice(index + 4, closingIndex).trim();
+  if (label.length === 0) {
+    return null;
+  }
+
+  return {
+    node: {
+      type: "footnote-reference",
+      label,
+      position: {
+        start: createOffsetPosition(startPosition, index),
+        end: createOffsetPosition(startPosition, closingIndex + 1),
+      },
+    },
+    nextIndex: closingIndex + 1,
+  };
 }
 
 function parseTimestampAt(

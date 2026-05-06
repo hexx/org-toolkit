@@ -5,9 +5,13 @@ describe("walk", () => {
   it("visits the AST depth-first with parent context", () => {
     const input = [
       "#+TITLE: Traversal Demo",
+      "# Comment about the doc",
       "* TODO Build report :work:",
       "SCHEDULED: <2026-05-10 Sun>",
       "Plan includes /analysis/ and [[https://example.com][*Docs*]] plus [2026-05-08 Fri 15:00].",
+      "See [fn:1] for details.",
+      "",
+      "[fn:1] Footnote *detail*.",
       "- [ ] Draft *intro*",
       "| Name | Role |",
       "|------+------|",
@@ -29,12 +33,15 @@ describe("walk", () => {
     });
 
     expect(visits[0]).toEqual({ type: "root", parent: undefined, depth: 0 });
+    expect(visits).toContainEqual({ type: "comment", parent: "root", depth: 1 });
     expect(visits).toContainEqual({ type: "heading", parent: "root", depth: 1 });
     expect(visits).toContainEqual({ type: "timestamp", parent: "heading", depth: 2 });
     expect(visits).toContainEqual({ type: "paragraph", parent: "root", depth: 1 });
     expect(visits).toContainEqual({ type: "italic", parent: "paragraph", depth: 2 });
     expect(visits).toContainEqual({ type: "link", parent: "paragraph", depth: 2 });
     expect(visits).toContainEqual({ type: "timestamp", parent: "paragraph", depth: 2 });
+    expect(visits).toContainEqual({ type: "footnote-reference", parent: "paragraph", depth: 2 });
+    expect(visits).toContainEqual({ type: "footnote-definition", parent: "root", depth: 1 });
     expect(visits).toContainEqual({ type: "list-item", parent: "list", depth: 2 });
     expect(visits).toContainEqual({ type: "table-cell", parent: "table-row", depth: 3 });
     expect(visits).toContainEqual({ type: "block", parent: "root", depth: 1 });
