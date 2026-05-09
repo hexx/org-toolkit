@@ -75,3 +75,11 @@ npx org-toolkit --html sample.org
 npx org-toolkit --agenda ./my-notes
 npx org-toolkit --agenda "docs/**/*.org"
 ```
+
+### Web playground
+
+```bash
+cd playground
+npm install
+npm run dev
+```
