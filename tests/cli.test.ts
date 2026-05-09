@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { main } from "../src/cli.js";
@@ -18,7 +18,7 @@ describe("main", () => {
 
     expect(exitCode).toBe(1);
     expect(logSpy).toHaveBeenCalledWith(
-      "Usage: tsx src/cli.ts [--agenda|--html|--markdown|--roundtrip] <path|glob>",
+      "Usage: tsx src/cli.ts [--agenda|--format|--html|--markdown|--roundtrip] <path|glob>",
     );
   });
 
@@ -232,4 +232,66 @@ describe("main", () => {
       ].join("\n"),
     );
   });
+
+  it("prints formatted org text when requested", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "org-toolkit-"));
+    const filePath = join(directory, "sample.org");
+    const source = [
+      "* TODO Write docs :work:urgent:",
+      "",
+      "|Name|Age|",
+      "|---+---|",
+      "|Alice|24|",
+    ].join("\n");
+    await writeFile(filePath, source, "utf8");
+
+    const exitCode = await main(["--format", filePath]);
+
+    expect(exitCode).toBe(0);
+    expect(errorSpy).not.toHaveBeenCalled();
+    expect(logSpy).toHaveBeenLastCalledWith(
+      [
+        formatHeading("* TODO Write docs", ":work:urgent:"),
+        "",
+        "| Name  | Age |",
+        "|-----+---|",
+        "| Alice | 24  |",
+      ].join("\n"),
+    );
+  });
+
+  it("writes formatted org text in place when requested", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "org-toolkit-"));
+    const filePath = join(directory, "sample.org");
+    const source = [
+      "* TODO Write docs :work:urgent:",
+      "",
+      "|Name|Age|",
+      "|---+---|",
+      "|Alice|24|",
+    ].join("\n");
+    await writeFile(filePath, source, "utf8");
+
+    const exitCode = await main(["--format", "--write", filePath]);
+
+    expect(exitCode).toBe(0);
+    expect(errorSpy).not.toHaveBeenCalled();
+    expect(logSpy).not.toHaveBeenCalled();
+    expect(
+      await readFile(filePath, "utf8"),
+    ).toBe(
+      [
+        formatHeading("* TODO Write docs", ":work:urgent:"),
+        "",
+        "| Name  | Age |",
+        "|-----+---|",
+        "| Alice | 24  |",
+      ].join("\n"),
+    );
+  });
 });
+
+function formatHeading(body: string, tags: string): string {
+  const padding = Math.max(1, 77 - body.length);
+  return `${body}${" ".repeat(padding)}${tags}`;
+}
