@@ -41,5 +41,6 @@ export type { Visitor, VisitorCallback, VisitorMap, WalkContext } from "./traver
 export { walk } from "./traverse.js";
 export { stringify } from "./stringifier.js";
 export { toMarkdown } from "./exporters/markdown.js";
+export { toHtml } from "./exporters/html.js";
 export { resolveTodos } from "./plugins/resolveTodos.js";
 export { stripTags } from "./plugins/stripTags.js";

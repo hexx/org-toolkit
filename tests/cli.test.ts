@@ -18,7 +18,7 @@ describe("main", () => {
 
     expect(exitCode).toBe(1);
     expect(logSpy).toHaveBeenCalledWith(
-      "Usage: tsx src/cli.ts [--markdown|--roundtrip] <path/to/file.org>",
+      "Usage: tsx src/cli.ts [--html|--markdown|--roundtrip] <path/to/file.org>",
     );
   });
 
@@ -157,6 +157,45 @@ describe("main", () => {
         "```typescript",
         "console.log('hi');",
         "```",
+      ].join("\n"),
+    );
+  });
+
+  it("prints html when requested", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "org-toolkit-"));
+    const filePath = join(directory, "sample.org");
+    const source = [
+      "#+TITLE: Org Mode Parsing",
+      "",
+      "* TODO Project <Plan> :work:urgent:",
+      "",
+      "- [ ] Research /background/",
+      "- [X] Implement =core=",
+      "",
+      "See [[https://github.com][*GitHub*]] now",
+      "",
+      "| Name  | Age | Role     |",
+      "|-----+---+--------|",
+      "| Alice | 24  | Engineer |",
+      "| Bob   | 30  | Designer |",
+    ].join("\n");
+    await writeFile(filePath, source, "utf8");
+
+    const exitCode = await main(["--html", filePath]);
+
+    expect(exitCode).toBe(0);
+    expect(errorSpy).not.toHaveBeenCalled();
+    expect(logSpy).toHaveBeenLastCalledWith(
+      [
+        '<meta name="title" content="Org Mode Parsing">',
+        "",
+        "<h1>TODO Project &lt;Plan&gt;</h1>",
+        "",
+        "<ul><li><input type=\"checkbox\" disabled> Research <em>background</em></li><li><input type=\"checkbox\" disabled checked> Implement <code>core</code></li></ul>",
+        "",
+        '<p>See <a href="https://github.com"><strong>GitHub</strong></a> now</p>',
+        "",
+        "<table><thead><tr><th scope=\"col\">Name</th><th scope=\"col\">Age</th><th scope=\"col\">Role</th></tr></thead><tbody><tr><td>Alice</td><td>24</td><td>Engineer</td></tr><tr><td>Bob</td><td>30</td><td>Designer</td></tr></tbody></table>",
       ].join("\n"),
     );
   });

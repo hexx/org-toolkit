@@ -13,10 +13,11 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Parser } from "./parser.js";
 import { OrgParseError } from "./errors.js";
+import { toHtml } from "./exporters/html.js";
 import { toMarkdown } from "./exporters/markdown.js";
 import { stringify } from "./stringifier.js";
 
-const USAGE = "Usage: tsx src/cli.ts [--markdown|--roundtrip] <path/to/file.org>";
+const USAGE = "Usage: tsx src/cli.ts [--html|--markdown|--roundtrip] <path/to/file.org>";
 
 /**
  * Execute the CLI and return an exit code.
@@ -42,7 +43,9 @@ export async function main(argv: ReadonlyArray<string> = process.argv.slice(2)):
   try {
     const source = await readFile(filePath, "utf8");
     const ast = Parser.parse(source);
-    if (options.markdown) {
+    if (options.html) {
+      console.log(toHtml(ast));
+    } else if (options.markdown) {
       console.log(toMarkdown(ast));
     } else if (options.roundtrip) {
       console.log(stringify(ast));
@@ -58,18 +61,25 @@ export async function main(argv: ReadonlyArray<string> = process.argv.slice(2)):
 
 interface CliOptions {
   readonly filePath: string | undefined;
+  readonly html: boolean;
   readonly markdown: boolean;
   readonly roundtrip: boolean;
   readonly showUsage: boolean;
 }
 
 function parseCliArgs(argv: ReadonlyArray<string>): CliOptions {
+  let html = false;
   let markdown = false;
   let roundtrip = false;
   let filePath: string | undefined;
   let showUsage = false;
 
   for (const arg of argv) {
+    if (arg === "--html") {
+      html = true;
+      continue;
+    }
+
     if (arg === "--markdown") {
       markdown = true;
       continue;
@@ -100,6 +110,7 @@ function parseCliArgs(argv: ReadonlyArray<string>): CliOptions {
 
   return {
     filePath,
+    html,
     markdown,
     roundtrip,
     showUsage,
