@@ -63,6 +63,8 @@ console.log(stringify(next));
 
 ```bash
 npx org-toolkit sample.org
+npx org-toolkit --format sample.org
+npx org-toolkit --format --write sample.org
 npx org-toolkit --markdown sample.org
 npx org-toolkit --html sample.org
 ```

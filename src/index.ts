@@ -40,6 +40,7 @@ export { applyPlugins } from "./transform.js";
 export type { Visitor, VisitorCallback, VisitorMap, WalkContext } from "./traverse.js";
 export { walk } from "./traverse.js";
 export { stringify } from "./stringifier.js";
+export { format, formatFiles } from "./format.js";
 export { toMarkdown } from "./exporters/markdown.js";
 export { toHtml } from "./exporters/html.js";
 export { resolveTodos } from "./plugins/resolveTodos.js";

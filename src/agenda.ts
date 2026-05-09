@@ -1,22 +1,9 @@
-import { readFile, stat } from "node:fs/promises";
-import { basename, extname, relative, resolve } from "node:path";
+import { readFile } from "node:fs/promises";
+import { basename, relative } from "node:path";
 import type { Heading, InlineNode, TimestampNode } from "./ast.js";
+import { resolveOrgFiles } from "./file-discovery.js";
 import { findTodos } from "./query.js";
 import { parse } from "./parser.js";
-
-interface FastGlobOptions {
-  readonly cwd?: string;
-  readonly absolute?: boolean;
-  readonly onlyFiles?: boolean;
-  readonly unique?: boolean;
-  readonly dot?: boolean;
-  readonly followSymbolicLinks?: boolean;
-}
-
-type FastGlobRunner = (
-  patterns: string | ReadonlyArray<string>,
-  options: FastGlobOptions,
-) => Promise<ReadonlyArray<string>>;
 
 type AgendaBucket = "overdue" | "today" | "upcoming" | "no-date";
 
@@ -38,8 +25,6 @@ interface AgendaOptions {
 
 const LABEL_WIDTH = 10;
 const DATE_WIDTH = 10;
-const GLOB_PATTERN = /[*?[\]{}()!]/;
-
 /**
  * Build a printable agenda view from one or more org source paths.
  *
@@ -63,73 +48,7 @@ async function resolveAgendaFiles(
   sources: ReadonlyArray<string>,
   cwd: string,
 ): Promise<ReadonlyArray<string>> {
-  const files: string[] = [];
-  const seen = new Set<string>();
-
-  for (const source of sources) {
-    const resolved = resolve(cwd, source);
-    if (isGlobPattern(source)) {
-      const matches = await expandGlob(source, cwd);
-      appendUniqueFiles(files, seen, matches);
-      continue;
-    }
-
-    const sourceStat = await stat(resolved);
-    if (sourceStat.isDirectory()) {
-      const matches = await expandGlob("**/*.org", resolved);
-      appendUniqueFiles(files, seen, matches);
-      continue;
-    }
-
-    if (sourceStat.isFile()) {
-      if (extname(resolved).toLowerCase() !== ".org") {
-        throw new Error(`Agenda sources must be .org files, directories, or glob patterns: ${source}`);
-      }
-
-      appendUniqueFiles(files, seen, [resolved]);
-      continue;
-    }
-  }
-
-  if (files.length === 0) {
-    throw new Error("No org files found for agenda");
-  }
-
-  return files;
-}
-
-async function expandGlob(pattern: string, cwd: string): Promise<ReadonlyArray<string>> {
-  const glob = await loadFastGlob();
-  const matches = await glob(pattern, {
-    cwd,
-    absolute: true,
-    onlyFiles: true,
-    unique: true,
-    dot: false,
-    followSymbolicLinks: false,
-  });
-
-  return matches.filter((filePath) => extname(filePath).toLowerCase() === ".org");
-}
-
-async function loadFastGlob(): Promise<FastGlobRunner> {
-  const module = (await import("fast-glob")) as unknown as { readonly default: FastGlobRunner };
-  return module.default;
-}
-
-function appendUniqueFiles(
-  output: string[],
-  seen: Set<string>,
-  files: ReadonlyArray<string>,
-): void {
-  for (const filePath of files) {
-    if (seen.has(filePath)) {
-      continue;
-    }
-
-    seen.add(filePath);
-    output.push(filePath);
-  }
+  return resolveOrgFiles(sources, cwd);
 }
 
 async function collectAgendaItems(
@@ -326,10 +245,6 @@ function formatDate(date: Date): string {
 function formatDisplayPath(filePath: string, cwd: string): string {
   const relativePath = relative(cwd, filePath);
   return relativePath.length > 0 ? relativePath : basename(filePath);
-}
-
-function isGlobPattern(source: string): boolean {
-  return GLOB_PATTERN.test(source);
 }
 
 function assertNever(value: never): never {

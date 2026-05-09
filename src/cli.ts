@@ -14,11 +14,12 @@ import { dirname, resolve } from "node:path";
 import { Parser } from "./parser.js";
 import { OrgParseError } from "./errors.js";
 import { runAgenda } from "./agenda.js";
+import { formatFiles } from "./format.js";
 import { toHtml } from "./exporters/html.js";
 import { toMarkdown } from "./exporters/markdown.js";
 import { stringify } from "./stringifier.js";
 
-const USAGE = "Usage: tsx src/cli.ts [--agenda|--html|--markdown|--roundtrip] <path|glob>";
+const USAGE = "Usage: tsx src/cli.ts [--agenda|--format|--html|--markdown|--roundtrip] <path|glob>";
 
 /**
  * Execute the CLI and return an exit code.
@@ -39,6 +40,16 @@ export async function main(argv: ReadonlyArray<string> = process.argv.slice(2)):
   if (options.agenda) {
     const output = await runAgenda(options.sources, {
       cwd: await resolveAgendaCwd(options.sources),
+    });
+    if (output.length > 0) {
+      console.log(output);
+    }
+    return 0;
+  }
+
+  if (options.format) {
+    const output = await formatFiles(options.sources, {
+      write: options.write,
     });
     if (output.length > 0) {
       console.log(output);
@@ -72,6 +83,8 @@ export async function main(argv: ReadonlyArray<string> = process.argv.slice(2)):
 
 interface CliOptions {
   readonly agenda: boolean;
+  readonly format: boolean;
+  readonly write: boolean;
   readonly sources: ReadonlyArray<string>;
   readonly filePath: string | undefined;
   readonly html: boolean;
@@ -82,9 +95,11 @@ interface CliOptions {
 
 function parseCliArgs(argv: ReadonlyArray<string>): CliOptions {
   let agenda = false;
+  let format = false;
   let html = false;
   let markdown = false;
   let roundtrip = false;
+  let write = false;
   let filePath: string | undefined;
   const sources: string[] = [];
   let showUsage = false;
@@ -92,6 +107,16 @@ function parseCliArgs(argv: ReadonlyArray<string>): CliOptions {
   for (const arg of argv) {
     if (arg === "--agenda") {
       agenda = true;
+      continue;
+    }
+
+    if (arg === "--format") {
+      format = true;
+      continue;
+    }
+
+    if (arg === "--write") {
+      write = true;
       continue;
     }
 
@@ -125,12 +150,22 @@ function parseCliArgs(argv: ReadonlyArray<string>): CliOptions {
     }
   }
 
-  if ((agenda && sources.length === 0) || (!agenda && filePath === undefined)) {
+  if (write && !format) {
+    showUsage = true;
+  }
+
+  if ((agenda || format) && sources.length === 0) {
+    showUsage = true;
+  }
+
+  if (!agenda && !format && filePath === undefined) {
     showUsage = true;
   }
 
   return {
     agenda,
+    format,
+    write,
     sources,
     filePath,
     html,
