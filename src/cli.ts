@@ -9,14 +9,16 @@
  * npx tsx src/cli.ts --markdown path/to/file.org
  * ```
  */
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
+import { dirname, resolve } from "node:path";
 import { Parser } from "./parser.js";
 import { OrgParseError } from "./errors.js";
+import { runAgenda } from "./agenda.js";
 import { toHtml } from "./exporters/html.js";
 import { toMarkdown } from "./exporters/markdown.js";
 import { stringify } from "./stringifier.js";
 
-const USAGE = "Usage: tsx src/cli.ts [--html|--markdown|--roundtrip] <path/to/file.org>";
+const USAGE = "Usage: tsx src/cli.ts [--agenda|--html|--markdown|--roundtrip] <path|glob>";
 
 /**
  * Execute the CLI and return an exit code.
@@ -34,6 +36,16 @@ export async function main(argv: ReadonlyArray<string> = process.argv.slice(2)):
   }
 
   const filePath = options.filePath;
+  if (options.agenda) {
+    const output = await runAgenda(options.sources, {
+      cwd: await resolveAgendaCwd(options.sources),
+    });
+    if (output.length > 0) {
+      console.log(output);
+    }
+    return 0;
+  }
+
   if (filePath === undefined) {
     console.log(USAGE);
     return 1;
@@ -59,6 +71,8 @@ export async function main(argv: ReadonlyArray<string> = process.argv.slice(2)):
 }
 
 interface CliOptions {
+  readonly agenda: boolean;
+  readonly sources: ReadonlyArray<string>;
   readonly filePath: string | undefined;
   readonly html: boolean;
   readonly markdown: boolean;
@@ -67,13 +81,20 @@ interface CliOptions {
 }
 
 function parseCliArgs(argv: ReadonlyArray<string>): CliOptions {
+  let agenda = false;
   let html = false;
   let markdown = false;
   let roundtrip = false;
   let filePath: string | undefined;
+  const sources: string[] = [];
   let showUsage = false;
 
   for (const arg of argv) {
+    if (arg === "--agenda") {
+      agenda = true;
+      continue;
+    }
+
     if (arg === "--html") {
       html = true;
       continue;
@@ -98,22 +119,64 @@ function parseCliArgs(argv: ReadonlyArray<string>): CliOptions {
       continue;
     }
 
+    sources.push(arg);
     if (filePath === undefined) {
       filePath = arg;
     }
   }
 
-  if (filePath === undefined) {
+  if ((agenda && sources.length === 0) || (!agenda && filePath === undefined)) {
     showUsage = true;
   }
 
   return {
+    agenda,
+    sources,
     filePath,
     html,
     markdown,
     roundtrip,
     showUsage,
   };
+}
+
+async function resolveAgendaCwd(sources: ReadonlyArray<string>): Promise<string> {
+  if (sources.length !== 1) {
+    return process.cwd();
+  }
+
+  const source = sources[0];
+  if (source === undefined || isLikelyGlobPattern(source)) {
+    return process.cwd();
+  }
+
+  const resolved = resolve(process.cwd(), source);
+  try {
+    const entry = await stat(resolved);
+    if (entry.isDirectory()) {
+      return resolved;
+    }
+
+    if (entry.isFile()) {
+      return dirname(resolved);
+    }
+
+    return process.cwd();
+  } catch (error: unknown) {
+    if (isNotFoundError(error)) {
+      return process.cwd();
+    }
+
+    throw error;
+  }
+}
+
+function isLikelyGlobPattern(source: string): boolean {
+  return /[*?[\]{}()!]/.test(source);
+}
+
+function isNotFoundError(error: unknown): boolean {
+  return error instanceof Error && "code" in error && (error as { code?: string }).code === "ENOENT";
 }
 
 function reportError(error: unknown): void {

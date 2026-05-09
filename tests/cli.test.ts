@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { main } from "../src/cli.js";
@@ -18,7 +18,7 @@ describe("main", () => {
 
     expect(exitCode).toBe(1);
     expect(logSpy).toHaveBeenCalledWith(
-      "Usage: tsx src/cli.ts [--html|--markdown|--roundtrip] <path/to/file.org>",
+      "Usage: tsx src/cli.ts [--agenda|--html|--markdown|--roundtrip] <path|glob>",
     );
   });
 
@@ -196,6 +196,39 @@ describe("main", () => {
         '<p>See <a href="https://github.com"><strong>GitHub</strong></a> now</p>',
         "",
         "<table><thead><tr><th scope=\"col\">Name</th><th scope=\"col\">Age</th><th scope=\"col\">Role</th></tr></thead><tbody><tr><td>Alice</td><td>24</td><td>Engineer</td></tr><tr><td>Bob</td><td>30</td><td>Designer</td></tr></tbody></table>",
+      ].join("\n"),
+    );
+  });
+
+  it("prints an agenda when requested", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "org-toolkit-"));
+    await mkdir(join(directory, "docs"), { recursive: true });
+
+    await writeFile(
+      join(directory, "work.org"),
+      ["* TODO Fix critical bug", "DEADLINE: <2026-05-01 Fri>"].join("\n"),
+      "utf8",
+    );
+    await writeFile(
+      join(directory, "project.org"),
+      ["* TODO Review pull request", "SCHEDULED: <2026-05-09 Fri>"].join("\n"),
+      "utf8",
+    );
+    await writeFile(
+      join(directory, "docs", "guide.org"),
+      ["* TODO Write documentation", "DEADLINE: <2026-05-12 Mon>"].join("\n"),
+      "utf8",
+    );
+
+    const exitCode = await main(["--agenda", directory]);
+
+    expect(exitCode).toBe(0);
+    expect(errorSpy).not.toHaveBeenCalled();
+    expect(logSpy).toHaveBeenLastCalledWith(
+      [
+        "[OVERDUE]  2026-05-01 | TODO Fix critical bug (work.org)",
+        "[TODAY]    2026-05-09 | TODO Review pull request (project.org)",
+        "[UPCOMING] 2026-05-12 | TODO Write documentation (docs/guide.org)",
       ].join("\n"),
     );
   });
