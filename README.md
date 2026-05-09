@@ -66,3 +66,10 @@ npx org-toolkit sample.org
 npx org-toolkit --markdown sample.org
 npx org-toolkit --html sample.org
 ```
+
+### Agenda
+
+```bash
+npx org-toolkit --agenda ./my-notes
+npx org-toolkit --agenda "docs/**/*.org"
+```
