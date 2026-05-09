@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 /**
  * Run the CLI with:
  *
@@ -9,8 +10,6 @@
  * ```
  */
 import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 import { Parser } from "./parser.js";
 import { OrgParseError } from "./errors.js";
 import { toHtml } from "./exporters/html.js";
@@ -142,7 +141,7 @@ function isDirectInvocation(): boolean {
     return false;
   }
 
-  return resolve(entryPoint) === fileURLToPath(import.meta.url);
+  return /[\\/](cli\.(?:ts|js|cjs))$/.test(entryPoint);
 }
 
 if (isDirectInvocation()) {
