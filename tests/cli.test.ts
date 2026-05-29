@@ -201,36 +201,61 @@ describe("main", () => {
   });
 
   it("prints an agenda when requested", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "org-toolkit-"));
-    await mkdir(join(directory, "docs"), { recursive: true });
+    const fixedNow = new Date("2026-05-09T12:00:00Z");
+    const RealDate = Date;
+    try {
+      const directory = await mkdtemp(join(tmpdir(), "org-toolkit-"));
+      await mkdir(join(directory, "docs"), { recursive: true });
 
-    await writeFile(
-      join(directory, "work.org"),
-      ["* TODO Fix critical bug", "DEADLINE: <2026-05-01 Fri>"].join("\n"),
-      "utf8",
-    );
-    await writeFile(
-      join(directory, "project.org"),
-      ["* TODO Review pull request", "SCHEDULED: <2026-05-09 Fri>"].join("\n"),
-      "utf8",
-    );
-    await writeFile(
-      join(directory, "docs", "guide.org"),
-      ["* TODO Write documentation", "DEADLINE: <2026-05-12 Mon>"].join("\n"),
-      "utf8",
-    );
+      await writeFile(
+        join(directory, "work.org"),
+        ["* TODO Fix critical bug", "DEADLINE: <2026-05-01 Fri>"].join("\n"),
+        "utf8",
+      );
+      await writeFile(
+        join(directory, "project.org"),
+        ["* TODO Review pull request", "SCHEDULED: <2026-05-09 Fri>"].join("\n"),
+        "utf8",
+      );
+      await writeFile(
+        join(directory, "docs", "guide.org"),
+        ["* TODO Write documentation", "DEADLINE: <2026-05-12 Mon>"].join("\n"),
+        "utf8",
+      );
 
-    const exitCode = await main(["--agenda", directory]);
+      class MockDate extends RealDate {
+        constructor(...args: [] | [number | string | Date]) {
+          if (args.length === 0) {
+            super(fixedNow);
+            return;
+          }
 
-    expect(exitCode).toBe(0);
-    expect(errorSpy).not.toHaveBeenCalled();
-    expect(logSpy).toHaveBeenLastCalledWith(
-      [
-        "[OVERDUE]  2026-05-01 | TODO Fix critical bug (work.org)",
-        "[TODAY]    2026-05-09 | TODO Review pull request (project.org)",
-        "[UPCOMING] 2026-05-12 | TODO Write documentation (docs/guide.org)",
-      ].join("\n"),
-    );
+          super(args[0]);
+        }
+
+        static override now(): number {
+          return fixedNow.getTime();
+        }
+
+        static override parse = RealDate.parse;
+        static override UTC = RealDate.UTC;
+      }
+
+      globalThis.Date = MockDate as unknown as DateConstructor;
+      const exitCode = await main(["--agenda", directory]);
+
+      expect(exitCode).toBe(0);
+      expect(errorSpy).not.toHaveBeenCalled();
+      expect(logSpy).toHaveBeenLastCalledWith(
+        [
+          "[OVERDUE]  2026-05-01 | TODO Fix critical bug (work.org)",
+          "[TODAY]    2026-05-09 | TODO Review pull request (project.org)",
+          "[UPCOMING] 2026-05-12 | TODO Write documentation (docs/guide.org)",
+        ].join("\n"),
+      );
+    } finally {
+      globalThis.Date = RealDate;
+    }
   });
 
   it("prints formatted org text when requested", async () => {
