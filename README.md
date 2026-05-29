@@ -83,3 +83,13 @@ cd playground
 npm install
 npm run dev
 ```
+
+### External consumer example
+
+```bash
+npm run build
+npm pack
+cd examples/consumer
+npm install ../../org-toolkit-0.1.0.tgz
+npm run start
+```

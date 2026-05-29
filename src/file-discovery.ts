@@ -42,7 +42,7 @@ export async function resolveOrgFiles(
 
     const sourceStat = await stat(resolved);
     if (sourceStat.isDirectory()) {
-      const matches = await expandGlob("**/*.org", resolved);
+      const matches = await expandGlob(["*.org", "**/*.org"], resolved);
       appendUniqueFiles(files, seen, matches);
       continue;
     }
@@ -64,7 +64,10 @@ export async function resolveOrgFiles(
   return files;
 }
 
-async function expandGlob(pattern: string, cwd: string): Promise<ReadonlyArray<string>> {
+async function expandGlob(
+  pattern: string | ReadonlyArray<string>,
+  cwd: string,
+): Promise<ReadonlyArray<string>> {
   const glob = await loadFastGlob();
   const matches = await glob(pattern, {
     cwd,
