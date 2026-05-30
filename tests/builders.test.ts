@@ -1,11 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
+  createBold,
   createHeading,
+  createItalic,
+  createLink,
   createList,
   createListItem,
   createParagraph,
   createPlainText,
   createRoot,
+  createTimestamp,
   stringify,
 } from "../src/index.js";
 
@@ -21,8 +25,18 @@ describe("builders", () => {
           todoKeyword: "TODO",
           tags: ["work", "urgent"],
         }),
-        createParagraph("Plan the package"),
-        createParagraph([createPlainText("Inline"), createPlainText(" "), createPlainText("nodes")]),
+        createParagraph([
+          createPlainText("Use "),
+          createBold("bold"),
+          createPlainText(" or "),
+          createItalic("italic"),
+          createPlainText(" text, visit "),
+          createLink("https://github.com", [createBold("GitHub")]),
+          createPlainText(" or "),
+          createLink("https://example.com"),
+          createPlainText(" at "),
+          createTimestamp(new Date(Date.UTC(2026, 4, 29, 7, 10)), { withTime: true }),
+        ]),
         createList("unordered", [
           createListItem("Draft docs", { checkbox: "unchecked" }),
           createListItem("Ship it", { checkbox: "checked" }),
@@ -41,9 +55,7 @@ describe("builders", () => {
         "",
         "* TODO Ship the package :work:urgent:",
         "",
-        "Plan the package",
-        "",
-        "Inline nodes",
+        "Use *bold* or /italic/ text, visit [[https://github.com][*GitHub*]] or [[https://example.com]] at <2026-05-29 07:10>",
         "",
         "- [ ] Draft docs",
         "- [X] Ship it",

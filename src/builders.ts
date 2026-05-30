@@ -1,14 +1,18 @@
 import type {
+  BoldNode,
+  ItalicNode,
   Heading,
   InlineNode,
   List,
   ListItem,
   ListItemCheckboxState,
+  LinkNode,
   Paragraph,
   Position,
   Root,
   SourceRange,
   TextNode,
+  TimestampNode,
 } from "./ast.js";
 
 const ZERO_POSITION: Position = {
@@ -28,6 +32,10 @@ function createSyntheticRange(): SourceRange {
     start: { ...ZERO_POSITION },
     end: { ...ZERO_POSITION },
   };
+}
+
+function toInlineChildren(textOrNodes: string | ReadonlyArray<InlineNode>): ReadonlyArray<InlineNode> {
+  return typeof textOrNodes === "string" ? [createPlainText(textOrNodes)] : [...textOrNodes];
 }
 
 /**
@@ -91,11 +99,9 @@ export function createHeading(
  * ```
  */
 export function createParagraph(textOrNodes: string | ReadonlyArray<InlineNode>): Paragraph {
-  const children = typeof textOrNodes === "string" ? [createPlainText(textOrNodes)] : [...textOrNodes];
-
   return {
     type: "paragraph",
-    children,
+    children: toInlineChildren(textOrNodes),
     position: createSyntheticRange(),
   };
 }
@@ -112,6 +118,90 @@ export function createPlainText(value: string): TextNode {
   return {
     type: "text",
     value,
+    position: createSyntheticRange(),
+  };
+}
+
+/**
+ * Create a bold inline node.
+ *
+ * @example
+ * ```ts
+ * const bold = createBold("Important");
+ * ```
+ */
+export function createBold(children: string | ReadonlyArray<InlineNode>): BoldNode {
+  return {
+    type: "bold",
+    children: toInlineChildren(children),
+    position: createSyntheticRange(),
+  };
+}
+
+/**
+ * Create an italic inline node.
+ *
+ * @example
+ * ```ts
+ * const italic = createItalic("Later");
+ * ```
+ */
+export function createItalic(children: string | ReadonlyArray<InlineNode>): ItalicNode {
+  return {
+    type: "italic",
+    children: toInlineChildren(children),
+    position: createSyntheticRange(),
+  };
+}
+
+/**
+ * Create a link inline node.
+ *
+ * @example
+ * ```ts
+ * const link = createLink("https://github.com", "GitHub");
+ * ```
+ */
+export function createLink(
+  url: string,
+  description?: string | ReadonlyArray<InlineNode>,
+): LinkNode {
+  return {
+    type: "link",
+    url,
+    description: description === undefined ? undefined : toInlineChildren(description),
+    position: createSyntheticRange(),
+  };
+}
+
+/**
+ * Create an org timestamp node from a JavaScript Date.
+ *
+ * @example
+ * ```ts
+ * const timestamp = createTimestamp(new Date(Date.UTC(2026, 4, 29)));
+ * ```
+ */
+export function createTimestamp(
+  date: Date,
+  options: {
+    readonly isActive?: boolean;
+    readonly withTime?: boolean;
+  } = {},
+): TimestampNode {
+  if (Number.isNaN(date.getTime())) {
+    throw new RangeError("Date must be valid");
+  }
+
+  return {
+    type: "timestamp",
+    isActive: options.isActive ?? true,
+    year: date.getUTCFullYear(),
+    month: date.getUTCMonth() + 1,
+    day: date.getUTCDate(),
+    ...(options.withTime === true
+      ? { time: `${pad2(date.getUTCHours())}:${pad2(date.getUTCMinutes())}` }
+      : {}),
     position: createSyntheticRange(),
   };
 }
@@ -165,4 +255,8 @@ export function createListItem(
     children: [createPlainText(text)],
     position: createSyntheticRange(),
   };
+}
+
+function pad2(value: number): string {
+  return value.toString().padStart(2, "0");
 }
