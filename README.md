@@ -93,3 +93,24 @@ cd examples/consumer
 npm install ../../org-toolkit-0.1.0.tgz
 npm run start
 ```
+
+### Contributing and releases
+
+When you make a change that should be included in a release, run:
+
+```bash
+npm run changeset
+```
+
+This records the user-facing impact of your change and helps generate the next
+version and `CHANGELOG.md` entry.
+
+Release flow:
+
+```bash
+npm run version-packages
+npm run release
+```
+
+`version-packages` bumps package versions and updates the changelog. `release`
+builds the package and publishes it through Changesets.
