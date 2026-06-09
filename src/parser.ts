@@ -346,7 +346,7 @@ interface ParsedHeadingLine {
 function parseHeadingLine(
   lines: ReadonlyArray<LineEntry>,
   startIndex: number,
-  text: string,
+  _text: string,
 ): ParsedHeadingLine | null {
   const line = lines[startIndex];
   if (line === undefined) {
