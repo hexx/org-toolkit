@@ -1,21 +1,6 @@
 import type {
   ASTNode,
-  Block,
-  CommentNode,
-  DocumentMetadata,
-  FootnoteDefinitionNode,
-  FootnoteReferenceNode,
   Heading,
-  InlineNode,
-  List,
-  ListItem,
-  Paragraph,
-  Planning,
-  Root,
-  Table,
-  TableCell,
-  TableRow,
-  TextNode,
   TimestampNode,
 } from "./ast.js";
 

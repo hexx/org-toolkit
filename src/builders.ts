@@ -83,7 +83,7 @@ export function createHeading(
     type: "heading",
     level,
     tags: [...(options.tags ?? [])],
-    properties: { ...(options.properties ?? {}) },
+    properties: { ...options.properties },
     children: text.length > 0 ? [createPlainText(text)] : [],
     position: createSyntheticRange(),
     ...(options.todoKeyword === undefined ? {} : { todoKeyword: options.todoKeyword }),
