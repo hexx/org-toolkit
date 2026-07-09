@@ -14,7 +14,7 @@ import { dirname, resolve } from "node:path";
 import { Parser } from "./parser.js";
 import { OrgParseError } from "./errors.js";
 import { runAgenda } from "./agenda.js";
-import { formatFiles } from "./format.js";
+import { formatFiles } from "./file-system.js";
 import { toHtml } from "./exporters/html.js";
 import { toMarkdown } from "./exporters/markdown.js";
 import { stringify } from "./stringifier.js";
