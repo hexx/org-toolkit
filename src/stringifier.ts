@@ -15,7 +15,6 @@ import type {
   Table,
   TableCell,
   TableRow,
-  TextNode,
   TimestampNode,
 } from "./ast.js";
 import { readHeadingPlanningLines } from "./node-annotations.js";
@@ -74,11 +73,11 @@ export function stringify(node: ASTNode, options: StringifyOptions = {}): string
     case "table":
       return stringifyTable(node, ctx);
     case "table-row":
-      return stringifyTableRow(node);
+      return stringifyTableRow(node, undefined, ctx);
     case "table-cell":
       return stringifyTableCell(node, ctx);
     case "text":
-      return stringifyText(node);
+      return ctx.escapeDelimiters ? escapeInlineText(node.value, ctx.escapeChars) : node.value;
     case "hard-break":
       return stringifyHardBreak();
     case "bold":
@@ -250,10 +249,6 @@ function stringifyTableRow(node: TableRow, widths?: ReadonlyArray<number>, ctx?:
 
 function stringifyTableCell(node: TableCell, ctx: InlineRenderContext): string {
   return stringifyInline(node.children, ctx);
-}
-
-function stringifyText(node: TextNode): string {
-  return node.value;
 }
 
 function calculateTableWidths(rows: ReadonlyArray<TableRow>, ctx: InlineRenderContext): ReadonlyArray<number> {

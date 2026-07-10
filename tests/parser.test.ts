@@ -601,6 +601,34 @@ describe("parse", () => {
     });
   });
 
+  it("splits lists when the top-level kind changes (ordered -> unordered)", () => {
+    const input = ["1. first", "- second"].join("\n");
+    const ast = parse(input);
+    expect(ast.children).toHaveLength(2);
+    expect(ast.children[0]).toMatchObject({
+      type: "list",
+      kind: "ordered",
+    });
+    expect(ast.children[1]).toMatchObject({
+      type: "list",
+      kind: "unordered",
+    });
+  });
+
+  it("splits lists when the top-level kind changes (unordered -> ordered)", () => {
+    const input = ["- first", "1. second"].join("\n");
+    const ast = parse(input);
+    expect(ast.children).toHaveLength(2);
+    expect(ast.children[0]).toMatchObject({
+      type: "list",
+      kind: "unordered",
+    });
+    expect(ast.children[1]).toMatchObject({
+      type: "list",
+      kind: "ordered",
+    });
+  });
+
   // --- Issue #86: backslash escape un-escaping ---
 
   it("un-escapes backslash-escaped emphasis markers in text", () => {

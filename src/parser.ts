@@ -261,6 +261,17 @@ export function parse(text: string): Root {
     if (listItemLine !== null) {
       flushParagraph();
       flushTable();
+
+      // Flush when list kind changes at the same indent level to preserve
+      // the invariant that all children of a List share the same kind.
+      if (
+        listEntries.length > 0 &&
+        listEntries[listEntries.length - 1]!.indent === listItemLine.indent &&
+        listEntries[listEntries.length - 1]!.kind !== listItemLine.kind
+      ) {
+        flushList();
+      }
+
       listEntries = [...listEntries, {
         indent: listItemLine.indent,
         kind: listItemLine.kind,

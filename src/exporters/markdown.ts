@@ -297,6 +297,8 @@ function renderInlineNode(node: InlineNode): string {
       return renderFootnoteReference(node);
     case "timestamp":
       return renderTimestamp(node);
+    // hard-break is handled by render() before reaching renderInlineNode;
+    // kept here only for TypeScript exhaustiveness on the InlineNode union.
     case "hard-break":
       return "  \n";
     default:
