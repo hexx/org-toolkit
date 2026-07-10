@@ -32,7 +32,6 @@ export type {
   VerbatimNode,
 } from "./ast.js";
 export { OrgParseError } from "./errors.js";
-export { Parser } from "./parser.js";
 export { parse } from "./parser.js";
 export { findAllByType, findHeadingsByTag, findTodos } from "./query.js";
 export type { Plugin, Transformer } from "./transform.js";
@@ -40,6 +39,7 @@ export { applyPlugins } from "./transform.js";
 export type { Visitor, VisitorCallback, VisitorMap, WalkContext } from "./traverse.js";
 export { walk } from "./traverse.js";
 export { stringify } from "./stringifier.js";
+export type { StringifyOptions } from "./stringifier.js";
 export { getTextContent } from "./text.js";
 export { format } from "./format.js";
 export {

@@ -3,6 +3,7 @@ import type {
   Heading,
   TimestampNode,
 } from "./ast.js";
+import { assertNever } from "./internal/utils.js";
 
 export interface WalkContext {
   readonly parent?: ASTNode;
@@ -210,8 +211,4 @@ function invokeVisitor(visitor: Visitor, node: ASTNode, context: WalkContext): v
     default:
       assertNever(node);
   }
-}
-
-function assertNever(value: never): never {
-  throw new Error(`Unsupported node type: ${(value as { type?: string }).type ?? "unknown"}`);
 }

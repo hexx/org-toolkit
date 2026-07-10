@@ -14,6 +14,13 @@ describe("transform", () => {
 
     expect(next).not.toBe(ast);
     expect(stringify(ast)).toBe(input);
+    // resolveTodos must not mutate the original AST nodes (no readonly cast).
+    const originalHeading = ast.children[0];
+    expect(originalHeading?.type).toBe("heading");
+    if (originalHeading?.type === "heading") {
+      expect(originalHeading.todoKeyword).toBe("TODO");
+      expect(originalHeading.planning).toBeUndefined();
+    }
     expect(stringify(next)).toBe(
       [
         "* DONE Publish release",

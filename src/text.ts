@@ -1,4 +1,5 @@
 import type { ASTNode, InlineNode, TimestampNode } from "./ast.js";
+import { assertNever, formatDateParts } from "./internal/utils.js";
 
 /**
  * Extract readable plain text from any AST node.
@@ -62,9 +63,7 @@ function joinText(nodes: ReadonlyArray<ASTNode | InlineNode>, separator = ""): s
 }
 
 function formatTimestamp(node: TimestampNode): string {
-  const parts = [
-    `${node.year.toString().padStart(4, "0")}-${node.month.toString().padStart(2, "0")}-${node.day.toString().padStart(2, "0")}`,
-  ];
+  const parts = [formatDateParts(node.year, node.month, node.day)];
 
   if (node.time !== undefined) {
     parts.push(node.time);
@@ -77,6 +76,3 @@ function formatTimestamp(node: TimestampNode): string {
   return parts.join(" ");
 }
 
-function assertNever(value: never): never {
-  throw new Error(`Unsupported node type: ${(value as { type?: string }).type ?? "unknown"}`);
-}

@@ -18,11 +18,15 @@ import type {
   TextNode,
   TimestampNode,
 } from "./ast.js";
-import {
-  readBlankLinesAfter,
-  readHeadingPlanningLines,
-  readTimestampText,
-} from "./node-annotations.js";
+import { readHeadingPlanningLines } from "./node-annotations.js";
+import { assertNever, formatDateParts } from "./internal/utils.js";
+import { joinTopLevelChildren } from "./internal/render.js";
+
+/** Options that adjust how the stringifier renders an AST. */
+export interface StringifyOptions {
+  /** When set, align heading tag groups to this 1-based column. */
+  readonly alignTags?: number;
+}
 
 /**
  * Convert an AST node back into normalized org-mode text.
@@ -35,14 +39,14 @@ import {
  * const text = stringify(parse("* TODO Heading"));
  * ```
  */
-export function stringify(node: ASTNode): string {
+export function stringify(node: ASTNode, options: StringifyOptions = {}): string {
   switch (node.type) {
     case "root":
-      return stringifyRoot(node);
+      return stringifyRoot(node, options);
     case "document-metadata":
       return stringifyDocumentMetadata(node);
     case "heading":
-      return stringifyHeading(node);
+      return stringifyHeading(node, options.alignTags);
     case "paragraph":
       return stringifyParagraph(node);
     case "list":
@@ -81,9 +85,9 @@ export function stringify(node: ASTNode): string {
   }
 }
 
-function stringifyRoot(node: Root): string {
+function stringifyRoot(node: Root, options: StringifyOptions): string {
   const metadata = Object.entries(node.metadata).map(([key, value]) => `#+${key}: ${value}`.trimEnd());
-  const children = joinTopLevelChildren(node.children, stringify);
+  const children = joinTopLevelChildren(node.children, (child) => stringify(child, options));
 
   if (metadata.length === 0) {
     return children;
@@ -100,7 +104,7 @@ function stringifyDocumentMetadata(node: DocumentMetadata): string {
   return `#+${node.key}: ${node.value}`.trimEnd();
 }
 
-function stringifyHeading(node: Heading): string {
+function stringifyHeading(node: Heading, alignTags?: number): string {
   const parts: string[] = ["*".repeat(node.level)];
 
   if (node.todoKeyword !== undefined) {
@@ -114,7 +118,15 @@ function stringifyHeading(node: Heading): string {
 
   let line = parts.join(" ");
   if (node.tags.length > 0) {
-    line += ` :${node.tags.join(":")}:`;
+    const tags = `:${node.tags.join(":")}:`;
+    if (alignTags !== undefined) {
+      // Mimic Emacs `org-tags-column`: pad so the tag group starts at the
+      // configured column, with at least one separating space.
+      const padding = Math.max(1, alignTags - line.length);
+      line += " ".repeat(padding) + tags;
+    } else {
+      line += ` ${tags}`;
+    }
   }
 
   const sections = [line];
@@ -242,14 +254,13 @@ function stringifyInline(nodes: ReadonlyArray<InlineNode>): string {
 }
 
 function stringifyTimestamp(node: TimestampNode): string {
-  const rawText = readTimestampText(node);
-  if (rawText !== undefined) {
-    return rawText;
-  }
-
   const open = node.isActive ? "<" : "[";
   const close = node.isActive ? ">" : "]";
-  const parts = [`${node.year.toString().padStart(4, "0")}-${node.month.toString().padStart(2, "0")}-${node.day.toString().padStart(2, "0")}`];
+  const parts = [formatDateParts(node.year, node.month, node.day)];
+
+  if (node.weekday !== undefined) {
+    parts.push(node.weekday);
+  }
 
   if (node.time !== undefined) {
     parts.push(node.time);
@@ -269,31 +280,6 @@ function stringifyFootnoteReference(node: FootnoteReferenceNode): string {
 function stringifyFootnoteDefinition(node: FootnoteDefinitionNode): string {
   const content = stringifyInline(node.children);
   return content.length > 0 ? `[fn:${node.label}] ${content}` : `[fn:${node.label}]`;
-}
-
-function joinTopLevelChildren<T extends { readonly type: string }>(
-  children: ReadonlyArray<T>,
-  renderNode: (node: T) => string,
-): string {
-  const rendered: string[] = [];
-
-  children.forEach((child, index) => {
-    const value = renderNode(child);
-    if (value.length === 0) {
-      return;
-    }
-
-    if (rendered.length > 0) {
-      const previous = children[index - 1];
-      const blankLinesAfter = previous === undefined ? undefined : readBlankLinesAfter(previous);
-      const blankLines = blankLinesAfter ?? 1;
-      rendered.push("\n".repeat(blankLines + 1));
-    }
-
-    rendered.push(value);
-  });
-
-  return rendered.join("");
 }
 
 function stringifyInlineNode(node: InlineNode): string {
@@ -333,8 +319,4 @@ function stringifyLink(node: LinkNode): string {
 
 function formatCheckbox(checkbox: NonNullable<ListItem["checkbox"]>): string {
   return checkbox === "checked" ? "[X]" : "[ ]";
-}
-
-function assertNever(value: never): never {
-  throw new Error(`Unsupported node type: ${(value as { type?: string }).type ?? "unknown"}`);
 }

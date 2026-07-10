@@ -42,6 +42,7 @@
     "version-packages": "changeset version",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
+    "lint": "oxlint",
     "prepare": "npm run build",
     "prepublishOnly": "npm run build && npm test && npm run typecheck"
   },

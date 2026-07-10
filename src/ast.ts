@@ -526,6 +526,11 @@ export interface Planning {
 /**
  * An org timestamp rendered inline or inside planning metadata.
  *
+ * The optional `weekday` stores the day-of-week label (e.g. `"Sun"`) when the
+ * source timestamp included one. It is normalized from the date during
+ * parsing so round-tripping reproduces a correct label. Builder-created
+ * timestamps omit it.
+ *
  * @example
  * ```ts
  * const timestamp: TimestampNode = {
@@ -535,6 +540,7 @@ export interface Planning {
  *   month: 5,
  *   day: 10,
  *   time: "10:00",
+ *   weekday: "Sun",
  *   position: {
  *     start: { index: 0, line: 1, column: 1 },
  *     end: { index: 22, line: 1, column: 23 },
@@ -549,6 +555,7 @@ export interface TimestampNode extends NodeBase {
   readonly month: number;
   readonly day: number;
   readonly time?: string;
+  readonly weekday?: string;
   readonly repeater?: string;
 }
 

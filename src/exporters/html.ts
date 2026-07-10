@@ -9,7 +9,6 @@ import type {
   InlineNode,
   List,
   ListItem,
-  ListKind,
   LinkNode,
   Paragraph,
   Root,
@@ -19,11 +18,8 @@ import type {
   TextNode,
   TimestampNode,
 } from "../ast.js";
-import { readBlankLinesAfter } from "../node-annotations.js";
-
-interface RenderContext {
-  readonly listKind?: ListKind;
-}
+import { assertNever, formatDateParts, stripBlockBoundaryNewlines } from "../internal/utils.js";
+import { joinTopLevelChildren } from "../internal/render.js";
 
 /**
  * Convert an AST node into semantic HTML.
@@ -34,10 +30,10 @@ interface RenderContext {
  * ```
  */
 export function toHtml(node: ASTNode): string {
-  return render(node, {}).trimEnd();
+  return render(node).trimEnd();
 }
 
-function render(node: ASTNode, context: RenderContext): string {
+function render(node: ASTNode): string {
   switch (node.type) {
     case "root":
       return renderRoot(node);
@@ -46,11 +42,11 @@ function render(node: ASTNode, context: RenderContext): string {
     case "heading":
       return renderHeading(node);
     case "paragraph":
-      return renderParagraph(node, context);
+      return renderParagraph(node);
     case "list":
       return renderList(node);
     case "list-item":
-      return renderListItem(node, context);
+      return renderListItem(node);
     case "block":
       return renderBlock(node);
     case "comment":
@@ -87,7 +83,7 @@ function renderRoot(node: Root): string {
   const metadata = Object.entries(node.metadata).map(([key, value]) =>
     renderDocumentMetadata({ type: "document-metadata", key, value, position: node.position }),
   );
-  const children = joinTopLevelChildren(node.children, (child) => render(child, {}));
+  const children = joinTopLevelChildren(node.children, (child) => render(child));
 
   if (metadata.length === 0) {
     return children;
@@ -123,17 +119,16 @@ function renderHeading(node: Heading): string {
   return `<h${level}>${parts.join(" ")}</h${level}>`;
 }
 
-function renderParagraph(node: Paragraph, context: RenderContext): string {
-  void context;
+function renderParagraph(node: Paragraph): string {
   return `<p>${renderInline(node.children)}</p>`;
 }
 
 function renderList(node: List): string {
   const tag = node.kind === "ordered" ? "ol" : "ul";
-  return `<${tag}>${node.children.map((item) => renderListItem(item, { listKind: node.kind })).join("")}</${tag}>`;
+  return `<${tag}>${node.children.map((item) => renderListItem(item)).join("")}</${tag}>`;
 }
 
-function renderListItem(node: ListItem, context: RenderContext): string {
+function renderListItem(node: ListItem): string {
   const parts: string[] = [];
 
   if (node.checkbox !== null) {
@@ -147,7 +142,6 @@ function renderListItem(node: ListItem, context: RenderContext): string {
     parts.push(content);
   }
 
-  void context;
   return `<li>${parts.join(parts.length > 1 ? " " : "")}</li>`;
 }
 
@@ -221,7 +215,7 @@ function renderFootnoteDefinition(node: FootnoteDefinitionNode): string {
 }
 
 function renderInline(nodes: ReadonlyArray<InlineNode>): string {
-  return nodes.map((node) => render(node, {})).join("");
+  return nodes.map((node) => render(node)).join("");
 }
 
 function renderInlineNode(node: InlineNode): string {
@@ -260,31 +254,6 @@ function renderLink(node: LinkNode): string {
   return `<a href="${escapeHtmlAttr(node.url)}">${content}</a>`;
 }
 
-function joinTopLevelChildren<T extends { readonly type: string }>(
-  children: ReadonlyArray<T>,
-  renderNode: (node: T) => string,
-): string {
-  const rendered: string[] = [];
-
-  children.forEach((child, index) => {
-    const value = renderNode(child);
-    if (value.length === 0) {
-      return;
-    }
-
-    if (rendered.length > 0) {
-      const previous = children[index - 1];
-      const blankLinesAfter = previous === undefined ? undefined : readBlankLinesAfter(previous);
-      const blankLines = blankLinesAfter ?? 1;
-      rendered.push("\n".repeat(blankLines + 1));
-    }
-
-    rendered.push(value);
-  });
-
-  return rendered.join("");
-}
-
 function renderBlockQuoteContent(content: string): string {
   const text = stripBlockBoundaryNewlines(content);
   if (text.length === 0) {
@@ -297,32 +266,13 @@ function renderBlockQuoteContent(content: string): string {
     .join("\n");
 }
 
-function stripBlockBoundaryNewlines(content: string): string {
-  let start = 0;
-  let end = content.length;
-
-  if (content.startsWith("\r\n")) {
-    start = 2;
-  } else if (content.startsWith("\n") || content.startsWith("\r")) {
-    start = 1;
-  }
-
-  if (content.endsWith("\r\n")) {
-    end -= 2;
-  } else if (content.endsWith("\n") || content.endsWith("\r")) {
-    end -= 1;
-  }
-
-  return content.slice(start, Math.max(start, end));
-}
-
 function formatTimestampText(node: TimestampNode): string {
-  const date = `${node.year.toString().padStart(4, "0")}-${node.month.toString().padStart(2, "0")}-${node.day.toString().padStart(2, "0")}`;
+  const date = formatDateParts(node.year, node.month, node.day);
   return node.time === undefined ? date : `${date} ${node.time}`;
 }
 
 function formatTimestampDatetime(node: TimestampNode): string {
-  const date = `${node.year.toString().padStart(4, "0")}-${node.month.toString().padStart(2, "0")}-${node.day.toString().padStart(2, "0")}`;
+  const date = formatDateParts(node.year, node.month, node.day);
   return node.time === undefined ? date : `${date}T${node.time}:00`;
 }
 
@@ -356,8 +306,4 @@ function isSafeUrl(url: string): boolean {
   } catch {
     return false;
   }
-}
-
-function assertNever(value: never): never {
-  throw new Error(`Unsupported node type: ${(value as { type?: string }).type ?? "unknown"}`);
 }
