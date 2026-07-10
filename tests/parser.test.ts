@@ -465,4 +465,197 @@ describe("parse", () => {
     // The source wrote "Mon" but 2026-05-12 is a Tuesday; the parser normalizes.
     expect(timestamp).toMatchObject({ type: "timestamp", weekday: "Tue" });
   });
+
+  // --- Issue #84: horizontal rule and hard break ---
+
+  it("parses a horizontal rule (five or more dashes) into a horizontal-rule node", () => {
+    const ast = parse(["before", "", "-----", "", "after"].join("\n"));
+    expect(ast.children.map((child) => child.type)).toEqual([
+      "paragraph",
+      "horizontal-rule",
+      "paragraph",
+    ]);
+  });
+
+  it("parses longer dash runs as a horizontal rule", () => {
+    const ast = parse("--------");
+    expect(ast.children[0]?.type).toBe("horizontal-rule");
+  });
+
+  it("does not treat a four-dash line as a horizontal rule", () => {
+    const ast = parse("----");
+    expect(ast.children[0]).toMatchObject({
+      type: "paragraph",
+      children: [{ type: "text", value: "----" }],
+    });
+  });
+
+  it("parses a trailing backslash as a hard break inside a paragraph", () => {
+    const ast = parse("line one\\\nline two");
+    expect(ast.children[0]).toMatchObject({
+      type: "paragraph",
+      children: [
+        { type: "text", value: "line one" },
+        { type: "hard-break" },
+        { type: "text", value: "line two" },
+      ],
+    });
+  });
+
+  it("parses a trailing backslash followed by a newline as a hard break", () => {
+    const ast = parse("line one\\\nline two");
+    expect(ast.children[0]).toMatchObject({
+      type: "paragraph",
+      children: [
+        { type: "text", value: "line one" },
+        { type: "hard-break" },
+        { type: "text", value: "line two" },
+      ],
+    });
+  });
+
+  it("treats a backslash at the very end of input as a literal backslash", () => {
+    const ast = parse("last line\\");
+    expect(ast.children[0]).toMatchObject({
+      type: "paragraph",
+      children: [{ type: "text", value: "last line\\" }],
+    });
+  });
+
+  it("does not treat an inline backslash as a hard break", () => {
+    const ast = parse("a\\b");
+    expect(ast.children[0]).toMatchObject({
+      type: "paragraph",
+      children: [{ type: "text", value: "a\\b" }],
+    });
+  });
+
+  // --- Issue #83: nested lists ---
+
+  it("parses nested unordered lists into subList structure", () => {
+    const input = ["- parent", "  - child", "    - grandchild", "  - sibling", "- top2"].join(
+      "\n",
+    );
+    const ast = parse(input);
+    const list = ast.children[0];
+    expect(list?.type).toBe("list");
+    if (list?.type !== "list") {
+      return;
+    }
+
+    expect(list.children).toHaveLength(2);
+    const parent = list.children[0];
+    if (parent === undefined) {
+      return;
+    }
+    expect(parent).toMatchObject({ type: "list-item", marker: "-" });
+    expect(parent.children[0]).toMatchObject({ type: "text", value: "parent" });
+
+    expect(parent.subList).toMatchObject({ type: "list", kind: "unordered" });
+    expect(parent.subList?.children).toHaveLength(2);
+    expect(parent.subList?.children[1]).toMatchObject({
+      type: "list-item",
+      children: [{ type: "text", value: "sibling" }],
+    });
+
+    const child = parent.subList?.children[0];
+    expect(child?.children[0]).toMatchObject({ type: "text", value: "child" });
+    expect(child?.subList?.children[0]).toMatchObject({
+      type: "list-item",
+      children: [{ type: "text", value: "grandchild" }],
+    });
+  });
+
+  it("parses a mix of ordered and nested unordered lists", () => {
+    const input = ["1. first", "  - sub a", "  - sub b", "2. second"].join("\n");
+    const ast = parse(input);
+    const list = ast.children[0];
+    expect(list?.type).toBe("list");
+    if (list?.type !== "list") {
+      return;
+    }
+
+    expect(list.kind).toBe("ordered");
+    expect(list.children).toHaveLength(2);
+    expect(list.children[0]?.subList?.kind).toBe("unordered");
+    expect(list.children[0]?.subList?.children).toHaveLength(2);
+    expect(list.children[1]?.subList).toBeUndefined();
+  });
+
+  it("parses a checkbox item with a nested list", () => {
+    const input = ["- [ ] parent", "  - child"].join("\n");
+    const ast = parse(input);
+    const list = ast.children[0];
+    expect(list?.type).toBe("list");
+    if (list?.type !== "list") {
+      return;
+    }
+
+    expect(list.children[0]).toMatchObject({
+      type: "list-item",
+      checkbox: "unchecked",
+    });
+    expect(list.children[0]?.subList?.children[0]).toMatchObject({
+      type: "list-item",
+      children: [{ type: "text", value: "child" }],
+    });
+  });
+
+  it("splits lists when the top-level kind changes (ordered -> unordered)", () => {
+    const input = ["1. first", "- second"].join("\n");
+    const ast = parse(input);
+    expect(ast.children).toHaveLength(2);
+    expect(ast.children[0]).toMatchObject({
+      type: "list",
+      kind: "ordered",
+    });
+    expect(ast.children[1]).toMatchObject({
+      type: "list",
+      kind: "unordered",
+    });
+  });
+
+  it("splits lists when the top-level kind changes (unordered -> ordered)", () => {
+    const input = ["- first", "1. second"].join("\n");
+    const ast = parse(input);
+    expect(ast.children).toHaveLength(2);
+    expect(ast.children[0]).toMatchObject({
+      type: "list",
+      kind: "unordered",
+    });
+    expect(ast.children[1]).toMatchObject({
+      type: "list",
+      kind: "ordered",
+    });
+  });
+
+  // --- Issue #86: backslash escape un-escaping ---
+
+  it("un-escapes backslash-escaped emphasis markers in text", () => {
+    const ast = parse("not *bold\\* but plain");
+    expect(ast.children[0]).toMatchObject({
+      type: "paragraph",
+      children: [{ type: "text", value: "not *bold* but plain" }],
+    });
+  });
+
+  it("un-escapes backslash-escaped markers inside code and verbatim", () => {
+    const ast = parse("=a\\=b= and ~c\\~d~");
+    expect(ast.children[0]).toMatchObject({
+      type: "paragraph",
+      children: [
+        { type: "code", value: "a=b" },
+        { type: "text", value: " and " },
+        { type: "verbatim", value: "c~d" },
+      ],
+    });
+  });
+
+  it("does not treat an escaped opening marker as emphasis", () => {
+    const ast = parse("\\*not bold\\*");
+    expect(ast.children[0]).toMatchObject({
+      type: "paragraph",
+      children: [{ type: "text", value: "*not bold*" }],
+    });
+  });
 });

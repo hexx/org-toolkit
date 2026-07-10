@@ -120,4 +120,20 @@ describe("toMarkdown", () => {
       ].join("\n"),
     );
   });
+
+  it("renders a horizontal rule as ---", () => {
+    expect(toMarkdown(parse(["a", "", "-----", "", "b"].join("\n")))).toBe(
+      ["a", "", "---", "", "b"].join("\n"),
+    );
+  });
+
+  it("renders a hard break as two trailing spaces", () => {
+    expect(toMarkdown(parse("a\\\nb"))).toBe("a  \nb");
+  });
+
+  it("renders nested lists with two-space indentation", () => {
+    expect(toMarkdown(parse(["- parent", "  - child", "- top2"].join("\n")))).toBe(
+      ["- parent", "  - child", "- top2"].join("\n"),
+    );
+  });
 });

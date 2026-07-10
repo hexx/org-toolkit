@@ -64,7 +64,14 @@ export interface Root extends NodeBase {
   readonly type: "root";
   readonly metadata: Readonly<Record<string, string>>;
   readonly children: ReadonlyArray<
-    Heading | Paragraph | List | Block | Table | FootnoteDefinitionNode | CommentNode
+    | Heading
+    | Paragraph
+    | List
+    | Block
+    | Table
+    | FootnoteDefinitionNode
+    | CommentNode
+    | HorizontalRuleNode
   >;
 }
 
@@ -138,7 +145,8 @@ export type InlineNode =
   | LinkNode
   | FootnoteReferenceNode
   | TimestampNode
-  | StrikeThroughNode;
+  | StrikeThroughNode
+  | HardBreakNode;
 
 /**
  * A heading node parsed from a line that starts with one or more `*`
@@ -248,6 +256,7 @@ export interface ListItem extends NodeBase {
   readonly marker: string;
   readonly checkbox: ListItemCheckboxState;
   readonly children: ReadonlyArray<InlineNode>;
+  readonly subList?: List;
 }
 
 /**
@@ -470,6 +479,42 @@ export interface FootnoteDefinitionNode extends NodeBase {
 }
 
 /**
+ * A horizontal rule drawn from five or more hyphens on a line by itself.
+ *
+ * @example
+ * ```ts
+ * const rule: HorizontalRuleNode = {
+ *   type: "horizontal-rule",
+ *   position: {
+ *     start: { index: 0, line: 1, column: 1 },
+ *     end: { index: 5, line: 1, column: 6 },
+ *   },
+ * };
+ * ```
+ */
+export interface HorizontalRuleNode extends NodeBase {
+  readonly type: "horizontal-rule";
+}
+
+/**
+ * A forced line break rendered from a trailing backslash in org-mode.
+ *
+ * @example
+ * ```ts
+ * const breakNode: HardBreakNode = {
+ *   type: "hard-break",
+ *   position: {
+ *     start: { index: 5, line: 1, column: 6 },
+ *     end: { index: 7, line: 1, column: 8 },
+ *   },
+ * };
+ * ```
+ */
+export interface HardBreakNode extends NodeBase {
+  readonly type: "hard-break";
+}
+
+/**
  * A comment line such as `# Note`.
  *
  * @example
@@ -587,4 +632,5 @@ export type ASTNode =
   | TableCell
   | FootnoteDefinitionNode
   | CommentNode
+  | HorizontalRuleNode
   | InlineNode;

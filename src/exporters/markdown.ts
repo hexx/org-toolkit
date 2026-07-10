@@ -61,6 +61,8 @@ function render(node: ASTNode, context: RenderContext): string {
       return renderBlock(node);
     case "comment":
       return renderComment(node);
+    case "horizontal-rule":
+      return "---";
     case "table":
       return renderTable(node);
     case "table-row":
@@ -69,6 +71,8 @@ function render(node: ASTNode, context: RenderContext): string {
       return renderTableCell(node);
     case "text":
       return renderText(node);
+    case "hard-break":
+      return "  \n";
     case "bold":
     case "italic":
     case "underline":
@@ -159,11 +163,19 @@ function renderListItem(node: ListItem, context: RenderContext): string {
     node.checkbox === null ? "" : ` ${node.checkbox === "checked" ? "[x]" : "[ ]"}`;
   const content = renderInline(node.children).trim();
 
+  let line: string;
   if (content.length === 0) {
-    return `${marker}${checkbox}`.trimEnd();
+    line = `${marker}${checkbox}`.trimEnd();
+  } else {
+    line = `${marker}${checkbox} ${content}`;
   }
 
-  return `${marker}${checkbox} ${content}`;
+  if (node.subList !== undefined) {
+    const sub = renderList(node.subList);
+    line = `${line}\n${indentMarkdownBlock(sub)}`;
+  }
+
+  return line;
 }
 
 function renderBlock(node: Block): string {
@@ -285,6 +297,10 @@ function renderInlineNode(node: InlineNode): string {
       return renderFootnoteReference(node);
     case "timestamp":
       return renderTimestamp(node);
+    // hard-break is handled by render() before reaching renderInlineNode;
+    // kept here only for TypeScript exhaustiveness on the InlineNode union.
+    case "hard-break":
+      return "  \n";
     default:
       return assertNever(node);
   }
@@ -296,6 +312,14 @@ function renderLink(node: LinkNode): string {
   }
 
   return `[${renderInline(node.description)}](${node.url})`;
+}
+
+/** Prepend two spaces to every line so a sub-list nests under its parent. */
+function indentMarkdownBlock(text: string): string {
+  return text
+    .split("\n")
+    .map((line) => (line.length > 0 ? `  ${line}` : line))
+    .join("\n");
 }
 
 function renderCodeSpan(value: string): string {

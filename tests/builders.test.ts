@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   createBold,
+  createHardBreak,
   createHeading,
+  createHorizontalRule,
   createItalic,
   createLink,
   createList,
@@ -64,5 +66,30 @@ describe("builders", () => {
         "1. Second step",
       ].join("\n"),
     );
+  });
+
+  it("builds a list item with a nested sub-list", () => {
+    const ast = createRoot(
+      {},
+      [
+        createList("unordered", [
+          createListItem("parent", {
+            subList: createList("unordered", [createListItem("child")]),
+          }),
+        ]),
+      ],
+    );
+    expect(stringify(ast)).toBe(["- parent", "  - child"].join("\n"));
+  });
+
+  it("builds horizontal rule and hard break nodes", () => {
+    const ast = createRoot(
+      {},
+      [
+        createParagraph([createPlainText("a"), createHardBreak(), createPlainText("b")]),
+        createHorizontalRule(),
+      ],
+    );
+    expect(stringify(ast)).toBe(["a\\", "b", "", "-----"].join("\n"));
   });
 });

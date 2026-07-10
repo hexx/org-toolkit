@@ -40,4 +40,15 @@ describe("getTextContent", () => {
 
     expect(getTextContent(paragraph)).toBe("Read GitHub at 2026-05-29 07:10");
   });
+
+  it("extracts text from nested lists", () => {
+    expect(getTextContent(parse(["- parent", "  - child"].join("\n")))).toBe(
+      "parent\nchild",
+    );
+  });
+
+  it("renders empty text for horizontal rules and hard breaks", () => {
+    expect(getTextContent(parse("-----"))).toBe("");
+    expect(getTextContent(parse("a\\\nb"))).toBe("a\nb");
+  });
 });

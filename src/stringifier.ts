@@ -15,7 +15,6 @@ import type {
   Table,
   TableCell,
   TableRow,
-  TextNode,
   TimestampNode,
 } from "./ast.js";
 import { readHeadingPlanningLines } from "./node-annotations.js";
@@ -26,6 +25,13 @@ import { joinTopLevelChildren } from "./internal/render.js";
 export interface StringifyOptions {
   /** When set, align heading tag groups to this 1-based column. */
   readonly alignTags?: number;
+  /**
+   * When `true` (the default), escape emphasis delimiter characters and
+   * backslashes inside emphasis/code/verbatim content so that builder-built
+   * ASTs round-trip safely through `stringify` -> `parse`. Set to `false` to
+   * emit content verbatim.
+   */
+  readonly escapeDelimiters?: boolean;
 }
 
 /**
@@ -40,44 +46,53 @@ export interface StringifyOptions {
  * ```
  */
 export function stringify(node: ASTNode, options: StringifyOptions = {}): string {
+  const ctx: InlineRenderContext = {
+    escapeDelimiters: options.escapeDelimiters !== false,
+    escapeChars: EMPTY_ESCAPE_CHARS,
+  };
+
   switch (node.type) {
     case "root":
       return stringifyRoot(node, options);
     case "document-metadata":
       return stringifyDocumentMetadata(node);
     case "heading":
-      return stringifyHeading(node, options.alignTags);
+      return stringifyHeading(node, options.alignTags, ctx);
     case "paragraph":
-      return stringifyParagraph(node);
+      return stringifyParagraph(node, ctx);
     case "list":
-      return stringifyList(node);
+      return stringifyList(node, ctx);
     case "list-item":
-      return stringifyListItem(node);
+      return stringifyListItem(node, ctx);
     case "block":
       return stringifyBlock(node);
     case "comment":
       return stringifyComment(node);
+    case "horizontal-rule":
+      return stringifyHorizontalRule();
     case "table":
-      return stringifyTable(node);
+      return stringifyTable(node, ctx);
     case "table-row":
-      return stringifyTableRow(node);
+      return stringifyTableRow(node, undefined, ctx);
     case "table-cell":
-      return stringifyTableCell(node);
+      return stringifyTableCell(node, ctx);
     case "text":
-      return stringifyText(node);
+      return ctx.escapeDelimiters ? escapeInlineText(node.value, ctx.escapeChars) : node.value;
+    case "hard-break":
+      return stringifyHardBreak();
     case "bold":
     case "italic":
     case "underline":
     case "strike-through":
     case "code":
     case "verbatim":
-      return stringifyInlineNode(node);
+      return stringifyInlineNode(node, ctx);
     case "link":
-      return stringifyLink(node);
+      return stringifyLink(node, ctx);
     case "footnote-reference":
       return stringifyFootnoteReference(node);
     case "footnote-definition":
-      return stringifyFootnoteDefinition(node);
+      return stringifyFootnoteDefinition(node, ctx);
     case "timestamp":
       return stringifyTimestamp(node);
     default:
@@ -104,14 +119,14 @@ function stringifyDocumentMetadata(node: DocumentMetadata): string {
   return `#+${node.key}: ${node.value}`.trimEnd();
 }
 
-function stringifyHeading(node: Heading, alignTags?: number): string {
+function stringifyHeading(node: Heading, alignTags: number | undefined, ctx: InlineRenderContext): string {
   const parts: string[] = ["*".repeat(node.level)];
 
   if (node.todoKeyword !== undefined) {
     parts.push(node.todoKeyword);
   }
 
-  const content = stringifyInline(node.children);
+  const content = stringifyInline(node.children, ctx);
   if (content.length > 0) {
     parts.push(content);
   }
@@ -142,18 +157,25 @@ function stringifyHeading(node: Heading, alignTags?: number): string {
   return sections.join("\n");
 }
 
-function stringifyParagraph(node: Paragraph): string {
-  return stringifyInline(node.children);
+function stringifyParagraph(node: Paragraph, ctx: InlineRenderContext): string {
+  return stringifyInline(node.children, ctx);
 }
 
-function stringifyList(node: List): string {
-  return node.children.map(stringifyListItem).join("\n");
+function stringifyList(node: List, ctx: InlineRenderContext): string {
+  return node.children.map((item) => stringifyListItem(item, ctx)).join("\n");
 }
 
-function stringifyListItem(node: ListItem): string {
+function stringifyListItem(node: ListItem, ctx: InlineRenderContext): string {
   const prefix = node.checkbox === null ? node.marker : `${node.marker} ${formatCheckbox(node.checkbox)}`;
-  const content = stringifyInline(node.children);
-  return content.length > 0 ? `${prefix} ${content}` : prefix;
+  const content = stringifyInline(node.children, ctx);
+  let line = content.length > 0 ? `${prefix} ${content}` : prefix;
+
+  if (node.subList !== undefined) {
+    const sub = stringifyList(node.subList, ctx);
+    line = `${line}\n${indentLines(sub, LIST_INDENT)}`;
+  }
+
+  return line;
 }
 
 function stringifyBlock(node: Block): string {
@@ -195,18 +217,18 @@ function stringifyHeadingPlanning(node: Heading): ReadonlyArray<string> {
   return lines;
 }
 
-function stringifyTable(node: Table): string {
-  const widths = calculateTableWidths(node.children);
-  return node.children.map((row) => stringifyTableRow(row, widths)).join("\n");
+function stringifyTable(node: Table, ctx: InlineRenderContext): string {
+  const widths = calculateTableWidths(node.children, ctx);
+  return node.children.map((row) => stringifyTableRow(row, widths, ctx)).join("\n");
 }
 
-function stringifyTableRow(node: TableRow, widths?: ReadonlyArray<number>): string {
+function stringifyTableRow(node: TableRow, widths?: ReadonlyArray<number>, ctx?: InlineRenderContext): string {
   if (node.rowType === "separator") {
     const separatorWidths =
       widths !== undefined && widths.length > 0
         ? widths
         : node.children.length > 0
-          ? node.children.map((cell) => Math.max(3, stringifyTableCell(cell).length))
+          ? node.children.map((cell) => Math.max(3, stringifyTableCell(cell, ctx ?? NO_CONTEXT).length))
           : [3];
     return `|${separatorWidths.map((width) => "-".repeat(Math.max(3, width))).join("+")}|`;
   }
@@ -214,10 +236,10 @@ function stringifyTableRow(node: TableRow, widths?: ReadonlyArray<number>): stri
   const rowWidths =
     widths !== undefined && widths.length > 0
       ? widths
-      : node.children.map((cell) => Math.max(3, stringifyTableCell(cell).length));
+      : node.children.map((cell) => Math.max(3, stringifyTableCell(cell, ctx ?? NO_CONTEXT).length));
 
   const cells = node.children.map((cell, index) => {
-    const value = stringifyTableCell(cell);
+    const value = stringifyTableCell(cell, ctx ?? NO_CONTEXT);
     const width = rowWidths[index] ?? Math.max(3, value.length);
     return ` ${value.padEnd(width)} `;
   });
@@ -225,15 +247,11 @@ function stringifyTableRow(node: TableRow, widths?: ReadonlyArray<number>): stri
   return `|${cells.join("|")}|`;
 }
 
-function stringifyTableCell(node: TableCell): string {
-  return stringifyInline(node.children);
+function stringifyTableCell(node: TableCell, ctx: InlineRenderContext): string {
+  return stringifyInline(node.children, ctx);
 }
 
-function stringifyText(node: TextNode): string {
-  return node.value;
-}
-
-function calculateTableWidths(rows: ReadonlyArray<TableRow>): ReadonlyArray<number> {
+function calculateTableWidths(rows: ReadonlyArray<TableRow>, ctx: InlineRenderContext): ReadonlyArray<number> {
   const widths: number[] = [];
 
   for (const row of rows) {
@@ -242,15 +260,15 @@ function calculateTableWidths(rows: ReadonlyArray<TableRow>): ReadonlyArray<numb
     }
 
     row.children.forEach((cell, index) => {
-      widths[index] = Math.max(widths[index] ?? 0, stringifyTableCell(cell).length);
+      widths[index] = Math.max(widths[index] ?? 0, stringifyTableCell(cell, ctx).length);
     });
   }
 
   return widths;
 }
 
-function stringifyInline(nodes: ReadonlyArray<InlineNode>): string {
-  return nodes.map((node) => stringify(node)).join("");
+function stringifyInline(nodes: ReadonlyArray<InlineNode>, ctx: InlineRenderContext): string {
+  return nodes.map((node) => stringifyInlineNode(node, ctx)).join("");
 }
 
 function stringifyTimestamp(node: TimestampNode): string {
@@ -277,46 +295,118 @@ function stringifyFootnoteReference(node: FootnoteReferenceNode): string {
   return `[fn:${node.label}]`;
 }
 
-function stringifyFootnoteDefinition(node: FootnoteDefinitionNode): string {
-  const content = stringifyInline(node.children);
+function stringifyFootnoteDefinition(node: FootnoteDefinitionNode, ctx: InlineRenderContext): string {
+  const content = stringifyInline(node.children, ctx);
   return content.length > 0 ? `[fn:${node.label}] ${content}` : `[fn:${node.label}]`;
 }
 
-function stringifyInlineNode(node: InlineNode): string {
+function stringifyInlineNode(node: InlineNode, ctx: InlineRenderContext): string {
   switch (node.type) {
     case "text":
-      return node.value;
+      return escapeInlineText(node.value, ctx.escapeChars);
     case "bold":
-      return `*${stringifyInline(node.children)}*`;
+      return `*${stringifyInline(node.children, withEscapeChar(ctx, "*"))}*`;
     case "italic":
-      return `/${stringifyInline(node.children)}/`;
+      return `/${stringifyInline(node.children, withEscapeChar(ctx, "/"))}/`;
     case "underline":
-      return `_${stringifyInline(node.children)}_`;
+      return `_${stringifyInline(node.children, withEscapeChar(ctx, "_"))}_`;
     case "strike-through":
-      return `+${stringifyInline(node.children)}+`;
+      return `+${stringifyInline(node.children, withEscapeChar(ctx, "+"))}+`;
     case "code":
-      return `=${node.value}=`;
+      return `=${ctx.escapeDelimiters ? escapeInlineText(node.value, new Set(["="])) : node.value}=`;
     case "verbatim":
-      return `~${node.value}~`;
+      return `~${ctx.escapeDelimiters ? escapeInlineText(node.value, new Set(["~"])) : node.value}~`;
     case "link":
-      return stringifyLink(node);
+      return stringifyLink(node, ctx);
     case "footnote-reference":
       return stringifyFootnoteReference(node);
     case "timestamp":
       return stringifyTimestamp(node);
+    case "hard-break":
+      return stringifyHardBreak();
     default:
       return assertNever(node);
   }
 }
 
-function stringifyLink(node: LinkNode): string {
+function stringifyLink(node: LinkNode, ctx: InlineRenderContext): string {
   if (node.description === undefined) {
     return `[[${node.url}]]`;
   }
 
-  return `[[${node.url}][${stringifyInline(node.description)}]]`;
+  return `[[${node.url}][${stringifyInline(node.description, withEscapeChar(ctx, "]"))}]]`;
+}
+
+function stringifyHorizontalRule(): string {
+  return "-----";
+}
+
+function stringifyHardBreak(): string {
+  return "\\\n";
 }
 
 function formatCheckbox(checkbox: NonNullable<ListItem["checkbox"]>): string {
   return checkbox === "checked" ? "[X]" : "[ ]";
+}
+
+/** Indentation prepended to each nested list level when stringifying. */
+const LIST_INDENT = "  ";
+
+interface InlineRenderContext {
+  readonly escapeDelimiters: boolean;
+  readonly escapeChars: ReadonlySet<string>;
+}
+
+const EMPTY_ESCAPE_CHARS: ReadonlySet<string> = new Set();
+
+const NO_CONTEXT: InlineRenderContext = {
+  escapeDelimiters: true,
+  escapeChars: EMPTY_ESCAPE_CHARS,
+};
+
+/**
+ * Derive a child inline context that also escapes `char` (used when entering
+ * an emphasis span or link description). Returns the same context when
+ * escaping is disabled or `char` is already escaped.
+ */
+function withEscapeChar(ctx: InlineRenderContext, char: string): InlineRenderContext {
+  if (!ctx.escapeDelimiters || ctx.escapeChars.has(char)) {
+    return ctx;
+  }
+
+  return {
+    escapeDelimiters: ctx.escapeDelimiters,
+    escapeChars: new Set([...ctx.escapeChars, char]),
+  };
+}
+
+/**
+ * Escape backslashes and every character in `chars` with a leading backslash
+ * so emphasis/code/link content round-trips safely through `parse`.
+ */
+function escapeInlineText(value: string, chars: ReadonlySet<string>): string {
+  if (chars.size === 0) {
+    return value;
+  }
+
+  let result = "";
+  for (const char of value) {
+    if (char === "\\") {
+      result += "\\\\";
+    } else if (chars.has(char)) {
+      result += `\\${char}`;
+    } else {
+      result += char;
+    }
+  }
+
+  return result;
+}
+
+/** Prepend `indent` to every line of a multi-line block (used for sub-lists). */
+function indentLines(text: string, indent: string): string {
+  return text
+    .split("\n")
+    .map((line) => (line.length > 0 ? `${indent}${line}` : line))
+    .join("\n");
 }

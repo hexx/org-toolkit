@@ -4,6 +4,8 @@ import type {
   DocumentMetadata,
   FootnoteDefinitionNode,
   FootnoteReferenceNode,
+  HardBreakNode,
+  HorizontalRuleNode,
   InlineNode,
   Heading,
   List,
@@ -28,7 +30,15 @@ import {
   rememberHeadingPlanningLines,
 } from "./node-annotations.js";
 
-type TopLevelNode = Heading | Paragraph | List | Block | Table | FootnoteDefinitionNode | CommentNode;
+type TopLevelNode =
+  | Heading
+  | Paragraph
+  | List
+  | Block
+  | Table
+  | FootnoteDefinitionNode
+  | CommentNode
+  | HorizontalRuleNode;
 
 interface LineEntry {
   readonly text: string;
@@ -37,12 +47,45 @@ interface LineEntry {
 
 interface ParsedListItemLine {
   readonly kind: ListKind;
-  readonly item: ListItem;
+  readonly indent: number;
+  readonly item: ListItemBuilder;
 }
 
 interface ParsedTableRowLine {
   readonly row: TableRow;
 }
+
+/**
+ * Mutable list builder used while reconstructing nested lists from indented
+ * lines. Only the `subList`/`children` fields are mutated during tree
+ * construction; the final tree is frozen into readonly AST nodes.
+ */
+interface ListItemBuilder {
+  readonly type: "list-item";
+  readonly marker: string;
+  readonly checkbox: ListItemCheckboxState;
+  readonly children: ReadonlyArray<InlineNode>;
+  subList: ListBuilder | undefined;
+  readonly position: SourceRange;
+}
+
+interface ListBuilder {
+  readonly type: "list";
+  readonly kind: ListKind;
+  children: ListItemBuilder[];
+  readonly position: SourceRange;
+}
+
+interface ListEntry {
+  readonly indent: number;
+  readonly kind: ListKind;
+  readonly item: ListItemBuilder;
+}
+
+const ZERO_POSITION: Position = { index: 0, line: 1, column: 1 };
+
+/** Characters that org-mode escapes with a leading backslash. */
+const ESCAPE_CHARS = new Set(["*", "/", "_", "+", "=", "~", "[", "]", "\\"]);
 
 const TODO_KEYWORDS = new Set([
   "TODO",
@@ -71,8 +114,7 @@ export function parse(text: string): Root {
   const metadata: Record<string, string> = {};
   const children: TopLevelNode[] = [];
   let paragraphBuffer: LineEntry[] = [];
-  let listBuffer: ListItem[] = [];
-  let listKind: ListKind | null = null;
+  let listEntries: ListEntry[] = [];
   let tableBuffer: TableRow[] = [];
   let pendingBlankLines = 0;
 
@@ -107,23 +149,13 @@ export function parse(text: string): Root {
   };
 
   const flushList = (): void => {
-    if (listBuffer.length === 0 || listKind === null) {
+    if (listEntries.length === 0) {
       return;
     }
 
-    const first = listBuffer[0]!;
-    const last = listBuffer[listBuffer.length - 1]!;
-    pushChild({
-      type: "list",
-      kind: listKind,
-      children: [...listBuffer],
-      position: {
-        start: first.position.start,
-        end: last.position.end,
-      },
-    });
-    listBuffer = [];
-    listKind = null;
+    const list = buildListTree(listEntries);
+    pushChild(list);
+    listEntries = [];
   };
 
   const flushTable = (): void => {
@@ -206,6 +238,16 @@ export function parse(text: string): Root {
       continue;
     }
 
+    const horizontalRule = parseHorizontalRuleLine(line);
+    if (horizontalRule !== null) {
+      flushParagraph();
+      flushList();
+      flushTable();
+      pushChild(horizontalRule);
+      index += 1;
+      continue;
+    }
+
     const tableRowLine = parseTableRowLine(line);
     if (tableRowLine !== null) {
       flushParagraph();
@@ -219,12 +261,22 @@ export function parse(text: string): Root {
     if (listItemLine !== null) {
       flushParagraph();
       flushTable();
-      if (listKind !== null && listKind !== listItemLine.kind) {
+
+      // Flush when list kind changes at the same indent level to preserve
+      // the invariant that all children of a List share the same kind.
+      if (
+        listEntries.length > 0 &&
+        listEntries[listEntries.length - 1]!.indent === listItemLine.indent &&
+        listEntries[listEntries.length - 1]!.kind !== listItemLine.kind
+      ) {
         flushList();
       }
 
-      listBuffer = [...listBuffer, listItemLine.item];
-      listKind = listItemLine.kind;
+      listEntries = [...listEntries, {
+        indent: listItemLine.indent,
+        kind: listItemLine.kind,
+        item: listItemLine.item,
+      }];
       index += 1;
       continue;
     }
@@ -635,6 +687,17 @@ function parseCommentLine(line: LineEntry): CommentNode | null {
   };
 }
 
+function parseHorizontalRuleLine(line: LineEntry): HorizontalRuleNode | null {
+  if (!/^[ \t]*-{5,}[ \t]*$/.test(line.text)) {
+    return null;
+  }
+
+  return {
+    type: "horizontal-rule",
+    position: line.position,
+  };
+}
+
 function parseListItemLine(line: LineEntry): ParsedListItemLine | null {
   const match = line.text.match(/^(\s*)([-+]|\d+[.)])([ \t]+)(.*)$/);
   if (match === null) {
@@ -672,14 +735,95 @@ function parseListItemLine(line: LineEntry): ParsedListItemLine | null {
 
   return {
     kind,
+    indent: leadingWhitespace.length,
     item: {
       type: "list-item",
       marker,
       checkbox,
       children,
+      subList: undefined,
       position: line.position,
     },
   };
+}
+
+/**
+ * Build a nested `List` tree from flat, indent-annotated list item entries.
+ *
+ * Items with a deeper indent than the previous item become children of that
+ * item's `subList`. Items at the same or shallower indent pop the stack back to
+ * the matching level, mirroring how org-mode reconstructs nesting from
+ * indentation.
+ */
+function buildListTree(entries: ReadonlyArray<ListEntry>): List {
+  const topChildren: ListItemBuilder[] = [];
+  const stack: Array<{ readonly indent: number; readonly item: ListItemBuilder }> = [];
+
+  for (const entry of entries) {
+    while (stack.length > 0 && stack[stack.length - 1]!.indent >= entry.indent) {
+      stack.pop();
+    }
+
+    if (stack.length === 0) {
+      topChildren.push(entry.item);
+    } else {
+      const parent = stack[stack.length - 1]!.item;
+      if (parent.subList === undefined) {
+        parent.subList = {
+          type: "list",
+          kind: entry.kind,
+          children: [],
+          position: entry.item.position,
+        };
+      }
+      parent.subList.children.push(entry.item);
+    }
+
+    stack.push({ indent: entry.indent, item: entry.item });
+  }
+
+  const first = entries[0]!.item;
+  const last = entries[entries.length - 1]!.item;
+  return {
+    type: "list",
+    kind: entries[0]!.kind,
+    children: topChildren.map(freezeListItem),
+    position: {
+      start: first.position.start,
+      end: last.position.end,
+    },
+  };
+}
+
+function freezeListItem(item: ListItemBuilder): ListItem {
+  const subList = item.subList === undefined ? undefined : freezeSubList(item.subList);
+  return {
+    type: "list-item",
+    marker: item.marker,
+    checkbox: item.checkbox,
+    children: item.children,
+    ...(subList !== undefined ? { subList } : {}),
+    position: item.position,
+  };
+}
+
+function freezeSubList(list: ListBuilder): List {
+  const children = list.children.map(freezeListItem);
+  const first = children[0];
+  const last = children[children.length - 1];
+  return {
+    type: "list",
+    kind: list.kind,
+    children,
+    position:
+      first !== undefined && last !== undefined
+        ? { start: first.position.start, end: itemEffectiveEnd(last) }
+        : list.position,
+  };
+}
+
+function itemEffectiveEnd(item: ListItem): Position {
+  return item.subList !== undefined ? item.subList.position.end : item.position.end;
 }
 
 function parseTableRowLine(line: LineEntry): ParsedTableRowLine | null {
@@ -855,28 +999,87 @@ function createOffsetPosition(position: Position, offset: number): Position {
   };
 }
 
-function parseInline(text: string, startPosition: Position): ReadonlyArray<InlineNode> {
+/**
+ * Parse org-mode inline markup (bold, italic, code, links, timestamps,
+ * footnote references, hard breaks, and backslash escapes) into inline AST
+ * nodes without any surrounding block structure.
+ *
+ * This is the same inline parser used by {@link parse}; exposing it lets
+ * external apps that manage their own block structure delegate only the inline
+ * decoration to org-toolkit.
+ *
+ * `startPosition` is optional and defaults to a zero position, which is
+ * convenient when the caller does not track source offsets.
+ *
+ * @example
+ * ```ts
+ * const nodes = parseInline("hello *bold* and [[https://example.com][link]]");
+ * // → [TextNode, BoldNode, TextNode, LinkNode]
+ * ```
+ */
+export function parseInline(text: string, startPosition?: Position): ReadonlyArray<InlineNode> {
+  const start = startPosition ?? ZERO_POSITION;
   const nodes: InlineNode[] = [];
   let index = 0;
+  let textBuffer = "";
   let textStart = 0;
 
   const flushText = (endIndex: number): void => {
-    if (endIndex <= textStart) {
+    if (textBuffer.length === 0) {
       return;
     }
 
     nodes.push({
       type: "text",
-      value: text.slice(textStart, endIndex),
+      value: textBuffer,
       position: {
-        start: createOffsetPosition(startPosition, textStart),
-        end: createOffsetPosition(startPosition, endIndex),
+        start: createOffsetPosition(start, textStart),
+        end: createOffsetPosition(start, endIndex),
       },
     });
+    textBuffer = "";
+  };
+
+  const beginTextRun = (): void => {
+    if (textBuffer.length === 0) {
+      textStart = index;
+    }
   };
 
   while (index < text.length) {
-    const footnoteReference = parseFootnoteReferenceAt(text, startPosition, index);
+    const char = text[index];
+
+    if (char === "\\") {
+      const next = text[index + 1];
+
+      if (next === "\n") {
+        flushText(index);
+        nodes.push({
+          type: "hard-break",
+          position: {
+            start: createOffsetPosition(start, index),
+            end: createOffsetPosition(start, index + 2),
+          },
+        } satisfies HardBreakNode);
+        index += 2;
+        textStart = index;
+        continue;
+      }
+
+      if (next !== undefined && ESCAPE_CHARS.has(next)) {
+        beginTextRun();
+        textBuffer += next;
+        index += 2;
+        continue;
+      }
+
+      beginTextRun();
+      textBuffer += "\\";
+      index += 1;
+      continue;
+    }
+
+    const footnoteReference = parseFootnoteReferenceAt(text, start, index);
     if (footnoteReference !== null) {
       flushText(index);
       nodes.push(footnoteReference.node);
@@ -885,7 +1088,7 @@ function parseInline(text: string, startPosition: Position): ReadonlyArray<Inlin
       continue;
     }
 
-    const timestamp = parseTimestampAt(text, startPosition, index);
+    const timestamp = parseTimestampAt(text, start, index);
     if (timestamp !== null) {
       flushText(index);
       nodes.push(timestamp.node);
@@ -894,7 +1097,7 @@ function parseInline(text: string, startPosition: Position): ReadonlyArray<Inlin
       continue;
     }
 
-    const link = parseLink(text, startPosition, index);
+    const link = parseLink(text, start, index);
     if (link !== null) {
       flushText(index);
       nodes.push(link.node);
@@ -903,7 +1106,7 @@ function parseInline(text: string, startPosition: Position): ReadonlyArray<Inlin
       continue;
     }
 
-    const emphasis = parseEmphasisAt(text, startPosition, index);
+    const emphasis = parseEmphasisAt(text, start, index);
     if (emphasis !== null) {
       flushText(index);
       nodes.push(emphasis.node);
@@ -912,6 +1115,8 @@ function parseInline(text: string, startPosition: Position): ReadonlyArray<Inlin
       continue;
     }
 
+    beginTextRun();
+    textBuffer += char;
     index += 1;
   }
 
@@ -980,6 +1185,11 @@ function parseEmphasisAt(
       continue;
     }
 
+    if (isEscaped(text, close)) {
+      search = close + 1;
+      continue;
+    }
+
     const innerText = text.slice(index + 1, close);
     if (innerText.length === 0 || hasEmphasisBorderViolation(innerText)) {
       search = close + 1;
@@ -993,7 +1203,7 @@ function parseEmphasisAt(
       return {
         node: {
           type: nodeType,
-          value: innerText,
+          value: unescapeInlineText(innerText),
           position: {
             start: nodeStart,
             end: nodeEnd,
@@ -1226,6 +1436,24 @@ function isInlineDelimiter(
     character === "=" ||
     character === "~"
   );
+}
+
+/**
+ * Determine whether the character at `index` is preceded by an odd run of
+ * backslashes, meaning it is escaped and should not be treated as a marker.
+ */
+function isEscaped(text: string, index: number): boolean {
+  let backslashes = 0;
+  for (let pos = index - 1; pos >= 0 && text[pos] === "\\"; pos -= 1) {
+    backslashes += 1;
+  }
+
+  return backslashes % 2 === 1;
+}
+
+/** Resolve org-mode backslash escapes (e.g. `\*` -> `*`, `\\` -> `\`). */
+function unescapeInlineText(text: string): string {
+  return text.replace(/\\([*/_+=~\\[\]])/g, "$1");
 }
 
 interface ParsedLink {

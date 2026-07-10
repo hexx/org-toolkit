@@ -1,5 +1,7 @@
 import type {
   BoldNode,
+  HardBreakNode,
+  HorizontalRuleNode,
   ItalicNode,
   Heading,
   InlineNode,
@@ -247,6 +249,7 @@ export function createListItem(
   options: {
     readonly checkbox?: ListItemCheckboxState;
     readonly marker?: string;
+    readonly subList?: List;
   } = {},
 ): ListItem {
   return {
@@ -254,6 +257,37 @@ export function createListItem(
     marker: options.marker ?? "-",
     checkbox: options.checkbox ?? null,
     children: [createPlainText(text)],
+    position: createSyntheticRange(),
+    ...(options.subList === undefined ? {} : { subList: options.subList }),
+  };
+}
+
+/**
+ * Create a horizontal rule node (rendered as `-----`).
+ *
+ * @example
+ * ```ts
+ * const rule = createHorizontalRule();
+ * ```
+ */
+export function createHorizontalRule(): HorizontalRuleNode {
+  return {
+    type: "horizontal-rule",
+    position: createSyntheticRange(),
+  };
+}
+
+/**
+ * Create a hard break inline node (a trailing backslash in org-mode).
+ *
+ * @example
+ * ```ts
+ * const br = createHardBreak();
+ * ```
+ */
+export function createHardBreak(): HardBreakNode {
+  return {
+    type: "hard-break",
     position: createSyntheticRange(),
   };
 }
