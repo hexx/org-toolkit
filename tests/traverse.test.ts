@@ -46,4 +46,31 @@ describe("walk", () => {
     expect(visits).toContainEqual({ type: "table-cell", parent: "table-row", depth: 3 });
     expect(visits).toContainEqual({ type: "block", parent: "root", depth: 1 });
   });
+
+  it("visits nested sub-lists under their parent list item", () => {
+    const ast = parse(["- parent", "  - child"].join("\n"));
+    const visits: string[] = [];
+    walk(ast, (node) => {
+      visits.push(node.type);
+    });
+    expect(visits).toEqual([
+      "root",
+      "list",
+      "list-item",
+      "text",
+      "list",
+      "list-item",
+      "text",
+    ]);
+  });
+
+  it("visits horizontal-rule and hard-break nodes", () => {
+    const ast = parse(["a\\", "b", "", "-----"].join("\n"));
+    const visits: string[] = [];
+    walk(ast, (node) => {
+      visits.push(node.type);
+    });
+    expect(visits).toContain("hard-break");
+    expect(visits).toContain("horizontal-rule");
+  });
 });

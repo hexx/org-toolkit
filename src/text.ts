@@ -1,4 +1,4 @@
-import type { ASTNode, InlineNode, TimestampNode } from "./ast.js";
+import type { ASTNode, InlineNode, ListItem, TimestampNode } from "./ast.js";
 import { assertNever, formatDateParts } from "./internal/utils.js";
 
 /**
@@ -21,19 +21,22 @@ export function getTextContent(node: ASTNode): string {
       return node.value;
     case "heading":
     case "paragraph":
-    case "list-item":
     case "table-cell":
     case "footnote-definition":
       return joinText(node.children);
     case "list":
     case "table":
       return joinText(node.children, "\n");
+    case "list-item":
+      return joinListItem(node);
     case "table-row":
       return node.rowType === "separator" ? "" : joinText(node.children, "\t");
     case "block":
       return node.content;
     case "comment":
       return node.content;
+    case "horizontal-rule":
+      return "";
     case "text":
       return node.value;
     case "bold":
@@ -50,6 +53,8 @@ export function getTextContent(node: ASTNode): string {
       return node.label;
     case "timestamp":
       return formatTimestamp(node);
+    case "hard-break":
+      return "\n";
     default:
       return assertNever(node);
   }
@@ -60,6 +65,16 @@ function joinText(nodes: ReadonlyArray<ASTNode | InlineNode>, separator = ""): s
     .map((child) => getTextContent(child))
     .filter((value) => value.length > 0)
     .join(separator);
+}
+
+function joinListItem(item: ListItem): string {
+  const own = joinText(item.children);
+  if (item.subList === undefined) {
+    return own;
+  }
+
+  const sub = getTextContent(item.subList);
+  return sub.length > 0 ? `${own}\n${sub}` : own;
 }
 
 function formatTimestamp(node: TimestampNode): string {

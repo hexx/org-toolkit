@@ -58,15 +58,20 @@ function visitNode(node: ASTNode, visitor: Visitor, context: WalkContext): void 
       break;
     case "list-item":
       visitArray(node.children, visitor, node, context.depth + 1);
+      if (node.subList !== undefined) {
+        visitNode(node.subList, visitor, { parent: node, depth: context.depth + 1 });
+      }
       break;
     case "block":
     case "document-metadata":
     case "comment":
+    case "horizontal-rule":
     case "text":
     case "timestamp":
     case "footnote-reference":
     case "code":
     case "verbatim":
+    case "hard-break":
       break;
     case "footnote-definition":
       visitArray(node.children, visitor, node, context.depth + 1);
@@ -207,6 +212,12 @@ function invokeVisitor(visitor: Visitor, node: ASTNode, context: WalkContext): v
       break;
     case "document-metadata":
       visitor["document-metadata"]?.(node, context);
+      break;
+    case "horizontal-rule":
+      visitor["horizontal-rule"]?.(node, context);
+      break;
+    case "hard-break":
+      visitor["hard-break"]?.(node, context);
       break;
     default:
       assertNever(node);

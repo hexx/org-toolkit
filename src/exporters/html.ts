@@ -51,6 +51,8 @@ function render(node: ASTNode): string {
       return renderBlock(node);
     case "comment":
       return renderComment(node);
+    case "horizontal-rule":
+      return "<hr>";
     case "table":
       return renderTable(node);
     case "table-row":
@@ -59,6 +61,8 @@ function render(node: ASTNode): string {
       return renderTableCell(node);
     case "text":
       return renderText(node);
+    case "hard-break":
+      return "<br>";
     case "bold":
     case "italic":
     case "underline":
@@ -140,6 +144,10 @@ function renderListItem(node: ListItem): string {
   const content = renderInline(node.children);
   if (content.length > 0) {
     parts.push(content);
+  }
+
+  if (node.subList !== undefined) {
+    parts.push(renderList(node.subList));
   }
 
   return `<li>${parts.join(parts.length > 1 ? " " : "")}</li>`;
@@ -240,6 +248,8 @@ function renderInlineNode(node: InlineNode): string {
       return renderFootnoteReference(node);
     case "timestamp":
       return renderTimestamp(node);
+    case "hard-break":
+      return "<br>";
     default:
       return assertNever(node);
   }

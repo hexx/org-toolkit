@@ -194,4 +194,88 @@ describe("stringify", () => {
     expect(output).toBe(input);
     expect(parse(output)).toEqual(ast);
   });
+
+  // --- Issue #84: horizontal rule and hard break ---
+
+  it("stringifies a horizontal-rule node as five dashes", () => {
+    expect(
+      stringify({
+        type: "horizontal-rule",
+        position: { start: { index: 0, line: 1, column: 1 }, end: { index: 5, line: 1, column: 6 } },
+      }),
+    ).toBe("-----");
+  });
+
+  it("round-trips a document with a horizontal rule and a hard break", () => {
+    const input = ["line one\\", "line two", "", "-----", "", "after"].join("\n");
+    const ast = parse(input);
+    expect(stringify(ast)).toBe(input);
+    expect(parse(stringify(ast))).toEqual(ast);
+  });
+
+  // --- Issue #83: nested lists ---
+
+  it("stringifies a nested list with two-space indentation per level", () => {
+    const input = ["- parent", "  - child", "    - grandchild", "  - sibling", "- top2"].join(
+      "\n",
+    );
+    const ast = parse(input);
+    expect(stringify(ast)).toBe(input);
+  });
+
+  it("round-trips nested ordered and unordered lists", () => {
+    const input = ["1. first", "  - sub a", "  - sub b", "2. second"].join("\n");
+    const ast = parse(input);
+    expect(stringify(ast)).toBe(input);
+    expect(parse(stringify(ast))).toEqual(ast);
+  });
+
+  it("round-trips a three-level nested list", () => {
+    const input = [
+      "- a",
+      "  - b",
+      "    - c",
+      "      - d",
+      "  - e",
+      "- f",
+    ].join("\n");
+    const ast = parse(input);
+    expect(stringify(ast)).toBe(input);
+    expect(parse(stringify(ast))).toEqual(ast);
+  });
+
+  // --- Issue #86: escape delimiters in stringify ---
+
+  it("escapes emphasis markers inside bold content", () => {
+    const input = "x *a\\*b* y";
+    const ast = parse(input);
+    expect(stringify(ast)).toBe(input);
+    expect(parse(stringify(ast))).toEqual(ast);
+  });
+
+  it("escapes the code delimiter inside code content", () => {
+    const input = "x =a\\=b= y";
+    const ast = parse(input);
+    expect(stringify(ast)).toBe(input);
+    expect(parse(stringify(ast))).toEqual(ast);
+  });
+
+  it("escapes the closing bracket inside a link description", () => {
+    const input = "[[https://example.com][a\\]b]]";
+    const ast = parse(input);
+    expect(stringify(ast)).toBe(input);
+    expect(parse(stringify(ast))).toEqual(ast);
+  });
+
+  it("escapes backslashes inside escaped content", () => {
+    const input = "x *a\\\\b* y";
+    const ast = parse(input);
+    expect(stringify(ast)).toBe(input);
+    expect(parse(stringify(ast))).toEqual(ast);
+  });
+
+  it("does not escape delimiters when escapeDelimiters is false", () => {
+    const ast = parse("=code=");
+    expect(stringify(ast, { escapeDelimiters: false })).toBe("=code=");
+  });
 });
