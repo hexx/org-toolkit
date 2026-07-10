@@ -20,9 +20,12 @@ import type {
   TimestampNode,
 } from "../ast.js";
 import {
-  readBlankLinesAfter,
-  readTimestampText,
-} from "../node-annotations.js";
+  assertNever,
+  formatDateParts,
+  splitBlockContentLines,
+  stripBlockBoundaryNewlines,
+} from "../internal/utils.js";
+import { joinTopLevelChildren } from "../internal/render.js";
 
 interface RenderContext {
   readonly listKind?: ListKind;
@@ -49,7 +52,7 @@ function render(node: ASTNode, context: RenderContext): string {
     case "heading":
       return renderHeading(node);
     case "paragraph":
-      return renderParagraph(node, context);
+      return renderParagraph(node);
     case "list":
       return renderList(node);
     case "list-item":
@@ -137,8 +140,7 @@ function renderHeading(node: Heading): string {
   return sections.join("\n");
 }
 
-function renderParagraph(node: Paragraph, context: RenderContext): string {
-  void context;
+function renderParagraph(node: Paragraph): string {
   return renderInline(node.children);
 }
 
@@ -254,44 +256,8 @@ function renderText(node: TextNode): string {
 }
 
 function renderTimestamp(node: TimestampNode): string {
-  const rawText = readTimestampText(node);
-  if (rawText !== undefined) {
-    const inner = rawText.slice(1, -1);
-    const parts = inner.split(/\s+/);
-    if (parts.length >= 1) {
-      const date = parts[0] ?? "";
-      const time = parts.find((part) => /^\d{2}:\d{2}$/.test(part));
-      return time === undefined ? date : `${date} ${time}`;
-    }
-  }
-
-  const date = `${node.year.toString().padStart(4, "0")}-${node.month.toString().padStart(2, "0")}-${node.day.toString().padStart(2, "0")}`;
+  const date = formatDateParts(node.year, node.month, node.day);
   return node.time === undefined ? date : `${date} ${node.time}`;
-}
-
-function joinTopLevelChildren<T extends { readonly type: string }>(
-  children: ReadonlyArray<T>,
-  renderNode: (node: T) => string,
-): string {
-  const rendered: string[] = [];
-
-  children.forEach((child, index) => {
-    const value = renderNode(child);
-    if (value.length === 0) {
-      return;
-    }
-
-    if (rendered.length > 0) {
-      const previous = children[index - 1];
-      const blankLinesAfter = previous === undefined ? undefined : readBlankLinesAfter(previous);
-      const blankLines = blankLinesAfter ?? 1;
-      rendered.push("\n".repeat(blankLines + 1));
-    }
-
-    rendered.push(value);
-  });
-
-  return rendered.join("");
 }
 
 function renderInline(nodes: ReadonlyArray<InlineNode>): string {
@@ -340,36 +306,4 @@ function renderCodeSpan(value: string): string {
     value.startsWith(" ") || value.endsWith(" ") || value.startsWith("`") || value.endsWith("`");
   const content = needsPadding ? ` ${value} ` : value;
   return `${fence}${content}${fence}`;
-}
-
-function stripBlockBoundaryNewlines(content: string): string {
-  let start = 0;
-  let end = content.length;
-
-  if (content.startsWith("\r\n")) {
-    start = 2;
-  } else if (content.startsWith("\n") || content.startsWith("\r")) {
-    start = 1;
-  }
-
-  if (content.endsWith("\r\n")) {
-    end -= 2;
-  } else if (content.endsWith("\n") || content.endsWith("\r")) {
-    end -= 1;
-  }
-
-  return content.slice(start, Math.max(start, end));
-}
-
-function splitBlockContentLines(content: string): ReadonlyArray<string> {
-  const normalized = stripBlockBoundaryNewlines(content);
-  if (normalized.length === 0) {
-    return [];
-  }
-
-  return normalized.split(/\r?\n/);
-}
-
-function assertNever(value: never): never {
-  throw new Error(`Unsupported node type: ${(value as { type?: string }).type ?? "unknown"}`);
 }

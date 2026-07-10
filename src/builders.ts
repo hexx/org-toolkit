@@ -14,6 +14,7 @@ import type {
   TextNode,
   TimestampNode,
 } from "./ast.js";
+import { pad2 } from "./internal/utils.js";
 
 const ZERO_POSITION: Position = {
   index: 0,
@@ -255,8 +256,4 @@ export function createListItem(
     children: [createPlainText(text)],
     position: createSyntheticRange(),
   };
-}
-
-function pad2(value: number): string {
-  return value.toString().padStart(2, "0");
 }

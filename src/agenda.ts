@@ -1,9 +1,11 @@
 import { readFile } from "node:fs/promises";
 import { basename, relative } from "node:path";
-import type { Heading, InlineNode, TimestampNode } from "./ast.js";
+import type { Heading, TimestampNode } from "./ast.js";
 import { resolveOrgFiles } from "./file-discovery.js";
 import { findTodos } from "./query.js";
 import { parse } from "./parser.js";
+import { getTextContent } from "./text.js";
+import { formatDateParts } from "./internal/utils.js";
 
 type AgendaBucket = "overdue" | "today" | "upcoming" | "no-date";
 
@@ -39,16 +41,9 @@ export async function runAgenda(
 ): Promise<string> {
   const cwd = options.cwd ?? process.cwd();
   const now = options.now ?? new Date();
-  const files = await resolveAgendaFiles(sources, cwd);
+  const files = await resolveOrgFiles(sources, cwd);
   const items = await collectAgendaItems(files, cwd, now);
   return formatAgenda(items, now);
-}
-
-async function resolveAgendaFiles(
-  sources: ReadonlyArray<string>,
-  cwd: string,
-): Promise<ReadonlyArray<string>> {
-  return resolveOrgFiles(sources, cwd);
 }
 
 async function collectAgendaItems(
@@ -178,35 +173,13 @@ function formatAgendaLabel(item: AgendaItem, now: Date): string {
 }
 
 function formatTodoTitle(heading: Heading): string {
-  const parts = [heading.todoKeyword ?? "TODO", renderInlineText(heading.children).trim()];
-  return parts.filter((part) => part.length > 0).join(" ").trim();
-}
-
-function renderInlineText(nodes: ReadonlyArray<InlineNode>): string {
-  return nodes.map(renderInlineNodeText).join("");
-}
-
-function renderInlineNodeText(node: InlineNode): string {
-  switch (node.type) {
-    case "text":
-      return node.value;
-    case "bold":
-    case "italic":
-    case "underline":
-    case "strike-through":
-      return renderInlineText(node.children);
-    case "code":
-    case "verbatim":
-      return node.value;
-    case "link":
-      return node.description === undefined ? node.url : renderInlineText(node.description);
-    case "footnote-reference":
-      return `[fn:${node.label}]`;
-    case "timestamp":
-      return formatDate(timestampToDate(node));
-    default:
-      return assertNever(node);
+  const title = getTextContent(heading).trim();
+  const todo = heading.todoKeyword;
+  if (todo === undefined || todo.length === 0) {
+    return title;
   }
+
+  return title.length > 0 ? `${todo} ${title}` : todo;
 }
 
 function getPriorityRank(heading: Heading): number {
@@ -235,18 +208,10 @@ function startOfUtcDay(date: Date): Date {
 }
 
 function formatDate(date: Date): string {
-  return [
-    date.getUTCFullYear().toString().padStart(4, "0"),
-    (date.getUTCMonth() + 1).toString().padStart(2, "0"),
-    date.getUTCDate().toString().padStart(2, "0"),
-  ].join("-");
+  return formatDateParts(date.getUTCFullYear(), date.getUTCMonth() + 1, date.getUTCDate());
 }
 
 function formatDisplayPath(filePath: string, cwd: string): string {
   const relativePath = relative(cwd, filePath);
   return relativePath.length > 0 ? relativePath : basename(filePath);
-}
-
-function assertNever(value: never): never {
-  throw new Error(`Unsupported node type: ${(value as { type?: string }).type ?? "unknown"}`);
 }

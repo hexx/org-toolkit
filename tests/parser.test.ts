@@ -405,4 +405,64 @@ describe("parse", () => {
       ],
     });
   });
+
+  it("does not misread arithmetic and paths as inline markup", () => {
+    // org-mode requires emphasis markers to sit on word/punctuation borders.
+    // `2 * 3 * 4` must stay plain text, not become bold.
+    const arithmetic = parse("2 * 3 * 4");
+    expect(arithmetic.children[0]).toMatchObject({
+      type: "paragraph",
+      children: [{ type: "text", value: "2 * 3 * 4" }],
+    });
+
+    // Underscores inside identifiers are not underline markers.
+    const identifier = parse("snake_case_value");
+    expect(identifier.children[0]).toMatchObject({
+      type: "paragraph",
+      children: [{ type: "text", value: "snake_case_value" }],
+    });
+
+    // Slashes inside file paths are not italic markers.
+    const filePath = parse("see /etc/hosts now");
+    expect(filePath.children[0]).toMatchObject({
+      type: "paragraph",
+      children: [{ type: "text", value: "see /etc/hosts now" }],
+    });
+
+    // Content cannot start or end with a border character.
+    const padded = parse("x * bold * y");
+    expect(padded.children[0]).toMatchObject({
+      type: "paragraph",
+      children: [{ type: "text", value: "x * bold * y" }],
+    });
+  });
+
+  it("parses emphasis with valid borders", () => {
+    const ast = parse("use *bold* and /italic/ and =code= here");
+    expect(ast.children[0]).toMatchObject({
+      type: "paragraph",
+      children: [
+        { type: "text", value: "use " },
+        { type: "bold", children: [{ type: "text", value: "bold" }] },
+        { type: "text", value: " and " },
+        { type: "italic", children: [{ type: "text", value: "italic" }] },
+        { type: "text", value: " and " },
+        { type: "code", value: "code" },
+        { type: "text", value: " here" },
+      ],
+    });
+  });
+
+  it("stores a normalized weekday on timestamps that include one", () => {
+    const ast = parse("Meeting [2026-05-12 Mon] now");
+    const paragraph = ast.children[0];
+    expect(paragraph?.type).toBe("paragraph");
+    if (paragraph?.type !== "paragraph") {
+      return;
+    }
+
+    const timestamp = paragraph.children.find((child) => child.type === "timestamp");
+    // The source wrote "Mon" but 2026-05-12 is a Tuesday; the parser normalizes.
+    expect(timestamp).toMatchObject({ type: "timestamp", weekday: "Tue" });
+  });
 });

@@ -1,50 +1,35 @@
-import type { Heading, TimestampNode } from "./ast.js";
+import type { Heading } from "./ast.js";
 
-const TIMESTAMP_TEXT_KEY = "__orgTimestampText";
-const HEADING_PLANNING_LINES_KEY = "__orgPlanningLines";
-const BLANK_LINES_AFTER_KEY = "__orgBlankLinesAfter";
+/**
+ * Parser-to-stringifier side channel for data that is "serialization
+ * metadata" rather than first-class AST content.
+ *
+ * These values are stored in WeakMaps (instead of hidden non-enumerable
+ * properties on the nodes) so the AST objects stay clean: `JSON.stringify`,
+ * structural cloning, and deep-equality checks see only the fields declared
+ * in `ast.ts`. WeakMap entries are intentionally not copied by AST cloning,
+ * which means transformed trees fall back to sensible defaults (one blank
+ * line between top-level nodes, reconstructed planning output).
+ */
 
-type HiddenObject = Record<string, unknown>;
-
-export function rememberTimestampText(node: TimestampNode, rawText: string): void {
-  defineHiddenValue(node, TIMESTAMP_TEXT_KEY, rawText);
-}
-
-export function readTimestampText(node: TimestampNode): string | undefined {
-  return readHiddenString(node, TIMESTAMP_TEXT_KEY);
-}
+const planningLinesStore = new WeakMap<Heading, ReadonlyArray<string>>();
+const blankLinesAfterStore = new WeakMap<object, number>();
 
 export function rememberHeadingPlanningLines(
   node: Heading,
   rawLines: ReadonlyArray<string>,
 ): void {
-  defineHiddenValue(node, HEADING_PLANNING_LINES_KEY, [...rawLines]);
+  planningLinesStore.set(node, [...rawLines]);
 }
 
 export function readHeadingPlanningLines(node: Heading): ReadonlyArray<string> | undefined {
-  const value = (node as unknown as HiddenObject)[HEADING_PLANNING_LINES_KEY];
-  return Array.isArray(value) ? value.filter((line): line is string => typeof line === "string") : undefined;
+  return planningLinesStore.get(node);
 }
 
 export function rememberBlankLinesAfter(node: object, blankLines: number): void {
-  defineHiddenValue(node, BLANK_LINES_AFTER_KEY, blankLines);
+  blankLinesAfterStore.set(node, blankLines);
 }
 
 export function readBlankLinesAfter(node: object): number | undefined {
-  const value = (node as unknown as HiddenObject)[BLANK_LINES_AFTER_KEY];
-  return typeof value === "number" ? value : undefined;
-}
-
-function defineHiddenValue(target: object, key: string, value: unknown): void {
-  Object.defineProperty(target, key, {
-    value,
-    enumerable: false,
-    configurable: true,
-    writable: false,
-  });
-}
-
-function readHiddenString(target: object, key: string): string | undefined {
-  const value = (target as unknown as HiddenObject)[key];
-  return typeof value === "string" ? value : undefined;
+  return blankLinesAfterStore.get(node);
 }

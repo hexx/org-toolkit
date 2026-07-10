@@ -4,6 +4,7 @@ import type {
   Root,
   TimestampNode,
 } from "./ast.js";
+import { pad2 } from "./internal/utils.js";
 import { walk } from "./traverse.js";
 
 /**
@@ -24,61 +25,24 @@ export type Transformer = Plugin;
 /**
  * Apply a sequence of plugins to an org AST without mutating the input tree.
  *
+ * The input AST is cloned with `structuredClone` so plugins can freely mutate
+ * their private copy. Parser-recorded spacing/planning metadata lives in a
+ * WeakMap side channel that is intentionally not carried across the clone, so
+ * transformed trees normalize to default spacing.
+ *
  * @example
  * ```ts
  * const next = applyPlugins(parse("* TODO Task"), [resolveTodos()]);
  * ```
  */
 export function applyPlugins(ast: Root, plugins: ReadonlyArray<Plugin>): Root {
-  let current = cloneValue(ast);
+  let current = structuredClone(ast);
 
   for (const plugin of plugins) {
     current = plugin(current);
   }
 
   return current;
-}
-
-function cloneValue<T>(value: T): T {
-  if (Array.isArray(value)) {
-    const clone: unknown[] = [];
-    for (const key of Reflect.ownKeys(value)) {
-      const descriptor = Object.getOwnPropertyDescriptor(value, key);
-      if (descriptor === undefined) {
-        continue;
-      }
-
-      if ("value" in descriptor) {
-        descriptor.value = cloneValue(descriptor.value);
-      }
-
-      Object.defineProperty(clone, key, descriptor);
-    }
-
-    return clone as T;
-  }
-
-  if (typeof value !== "object" || value === null) {
-    return value;
-  }
-
-  const prototype = Object.getPrototypeOf(value);
-  const clone = Object.create(prototype) as Record<PropertyKey, unknown>;
-
-  for (const key of Reflect.ownKeys(value)) {
-    const descriptor = Object.getOwnPropertyDescriptor(value, key);
-    if (descriptor === undefined) {
-      continue;
-    }
-
-    if ("value" in descriptor) {
-      descriptor.value = cloneValue(descriptor.value);
-    }
-
-    Object.defineProperty(clone, key, descriptor);
-  }
-
-  return clone as T;
 }
 
 /**
@@ -109,8 +73,4 @@ export function visitHeadings(root: Root, visitor: (heading: Heading) => void): 
       visitor(node);
     },
   });
-}
-
-function pad2(value: number): string {
-  return value.toString().padStart(2, "0");
 }

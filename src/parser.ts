@@ -26,7 +26,6 @@ import { OrgParseError } from "./errors.js";
 import {
   rememberBlankLinesAfter,
   rememberHeadingPlanningLines,
-  rememberTimestampText,
 } from "./node-annotations.js";
 
 type TopLevelNode = Heading | Paragraph | List | Block | Table | FootnoteDefinitionNode | CommentNode;
@@ -252,29 +251,6 @@ export function parse(text: string): Root {
       end,
     },
   };
-}
-
-/**
- * A compatibility wrapper that exposes `Parser.parse()` as requested by the
- * CLI milestone.
- *
- * @example
- * ```ts
- * const ast = Parser.parse("* TODO Heading");
- * ```
- */
-export class Parser {
-  /**
-   * Parse org-mode text into a root AST.
-   *
-   * @example
-   * ```ts
-   * const ast = Parser.parse("* TODO Heading");
-   * ```
-   */
-  public static parse(text: string): Root {
-    return parse(text);
-  }
 }
 
 function collectLineEntries(text: string): ReadonlyArray<LineEntry> {
@@ -931,95 +907,152 @@ function parseInline(text: string, startPosition: Position): ReadonlyArray<Inlin
       continue;
     }
 
-    const marker = text[index];
-    if (marker === undefined || !isInlineDelimiter(marker)) {
-      index += 1;
+    const emphasis = parseEmphasisAt(text, startPosition, index);
+    if (emphasis !== null) {
+      flushText(index);
+      nodes.push(emphasis.node);
+      index = emphasis.nextIndex;
+      textStart = index;
       continue;
     }
 
-    const closingIndex = text.indexOf(marker, index + 1);
-    if (closingIndex === -1) {
-      index += 1;
-      continue;
-    }
-
-    flushText(index);
-
-    const nodeStart = createOffsetPosition(startPosition, index);
-    const nodeEnd = createOffsetPosition(startPosition, closingIndex + 1);
-    const innerText = text.slice(index + 1, closingIndex);
-
-    switch (marker) {
-      case "*":
-        nodes.push({
-          type: "bold",
-          children: parseInline(innerText, createOffsetPosition(startPosition, index + 1)),
-          position: {
-            start: nodeStart,
-            end: nodeEnd,
-          },
-        });
-        break;
-      case "/":
-        nodes.push({
-          type: "italic",
-          children: parseInline(innerText, createOffsetPosition(startPosition, index + 1)),
-          position: {
-            start: nodeStart,
-            end: nodeEnd,
-          },
-        });
-        break;
-      case "_":
-        nodes.push({
-          type: "underline",
-          children: parseInline(innerText, createOffsetPosition(startPosition, index + 1)),
-          position: {
-            start: nodeStart,
-            end: nodeEnd,
-          },
-        });
-        break;
-      case "+":
-        nodes.push({
-          type: "strike-through",
-          children: parseInline(innerText, createOffsetPosition(startPosition, index + 1)),
-          position: {
-            start: nodeStart,
-            end: nodeEnd,
-          },
-        });
-        break;
-      case "=":
-        nodes.push({
-          type: "code",
-          value: innerText,
-          position: {
-            start: nodeStart,
-            end: nodeEnd,
-          },
-        });
-        break;
-      case "~":
-        nodes.push({
-          type: "verbatim",
-          value: innerText,
-          position: {
-            start: nodeStart,
-            end: nodeEnd,
-          },
-        });
-        break;
-      default:
-        break;
-    }
-
-    index = closingIndex + 1;
-    textStart = index;
+    index += 1;
   }
 
   flushText(text.length);
   return nodes;
+}
+
+interface ParsedEmphasis {
+  readonly node: InlineNode;
+  readonly nextIndex: number;
+}
+
+const EMPHASIS_MARKER_TO_TYPE = {
+  "*": "bold",
+  "/": "italic",
+  "_": "underline",
+  "+": "strike-through",
+  "=": "code",
+  "~": "verbatim",
+} as const;
+
+type EmphasisType = (typeof EMPHASIS_MARKER_TO_TYPE)[keyof typeof EMPHASIS_MARKER_TO_TYPE];
+
+/** Characters allowed immediately before an opening emphasis marker. */
+const EMPHASIS_PRE_CHARS = " \t('\"{";
+/** Characters allowed immediately after a closing emphasis marker. */
+const EMPHASIS_POST_CHARS = "\t\n .,!?;:'\")}-";
+/** Characters not allowed at the inner border of emphasized content. */
+const EMPHASIS_BORDER_CHARS = " \t\n.,;:!?";
+
+/**
+ * Parse an org-mode emphasis span starting at `index`.
+ *
+ * Implements the border rules from `org-emphasis-regexp-components`: the
+ * opening marker must be preceded by a border character (or start of text),
+ * the closing marker must be followed by a border character (or end of
+ * text), and the content cannot start or end with a forbidden border
+ * character. This prevents `2 * 3 * 4` from being misread as bold while
+ * keeping `*bold*` valid.
+ */
+function parseEmphasisAt(
+  text: string,
+  startPosition: Position,
+  index: number,
+): ParsedEmphasis | null {
+  const marker = text[index];
+  if (marker === undefined || !isInlineDelimiter(marker)) {
+    return null;
+  }
+
+  if (!isEmphasisPreBorder(text, index)) {
+    return null;
+  }
+
+  const nodeType: EmphasisType = EMPHASIS_MARKER_TO_TYPE[marker];
+  let search = index + 1;
+
+  while (search < text.length) {
+    const close = text.indexOf(marker, search);
+    if (close === -1) {
+      return null;
+    }
+
+    if (!isEmphasisPostBorder(text, close)) {
+      search = close + 1;
+      continue;
+    }
+
+    const innerText = text.slice(index + 1, close);
+    if (innerText.length === 0 || hasEmphasisBorderViolation(innerText)) {
+      search = close + 1;
+      continue;
+    }
+
+    const nodeStart = createOffsetPosition(startPosition, index);
+    const nodeEnd = createOffsetPosition(startPosition, close + 1);
+
+    if (nodeType === "code" || nodeType === "verbatim") {
+      return {
+        node: {
+          type: nodeType,
+          value: innerText,
+          position: {
+            start: nodeStart,
+            end: nodeEnd,
+          },
+        },
+        nextIndex: close + 1,
+      };
+    }
+
+    return {
+      node: {
+        type: nodeType,
+        children: parseInline(innerText, createOffsetPosition(startPosition, index + 1)),
+        position: {
+          start: nodeStart,
+          end: nodeEnd,
+        },
+      },
+      nextIndex: close + 1,
+    };
+  }
+
+  return null;
+}
+
+function isEmphasisPreBorder(text: string, markerIndex: number): boolean {
+  if (markerIndex === 0) {
+    return true;
+  }
+
+  const previous = text[markerIndex - 1];
+  return previous !== undefined && EMPHASIS_PRE_CHARS.includes(previous);
+}
+
+function isEmphasisPostBorder(text: string, markerIndex: number): boolean {
+  const afterIndex = markerIndex + 1;
+  if (afterIndex >= text.length) {
+    return true;
+  }
+
+  const after = text[afterIndex];
+  return after !== undefined && EMPHASIS_POST_CHARS.includes(after);
+}
+
+function hasEmphasisBorderViolation(content: string): boolean {
+  if (content.length === 0) {
+    return false;
+  }
+
+  const first = content[0];
+  const last = content[content.length - 1];
+  return (
+    (first !== undefined && EMPHASIS_BORDER_CHARS.includes(first)) ||
+    (last !== undefined && EMPHASIS_BORDER_CHARS.includes(last))
+  );
 }
 
 interface ParsedTimestamp {
@@ -1119,6 +1152,13 @@ function parseTimestampText(rawText: string, position: Position): TimestampNode 
   const repeater = repeaterIndex === -1 ? undefined : tokens.splice(repeaterIndex, 1)[0];
   const timeIndex = findLastMatchingIndex(tokens, (token) => /^\d{2}:\d{2}$/.test(token));
   const time = timeIndex === -1 ? undefined : tokens.splice(timeIndex, 1)[0];
+  const weekdayIndex = findLastMatchingIndex(tokens, isWeekdayToken);
+  const weekday =
+    weekdayIndex === -1 ? undefined : computeWeekday(year, month, day);
+  if (weekdayIndex !== -1) {
+    tokens.splice(weekdayIndex, 1);
+  }
+
   const timestamp: TimestampNode = {
     type: "timestamp",
     isActive,
@@ -1126,6 +1166,7 @@ function parseTimestampText(rawText: string, position: Position): TimestampNode 
     month,
     day,
     ...(time !== undefined ? { time } : {}),
+    ...(weekday !== undefined ? { weekday } : {}),
     ...(repeater !== undefined ? { repeater } : {}),
     position: {
       start: position,
@@ -1133,8 +1174,31 @@ function parseTimestampText(rawText: string, position: Position): TimestampNode 
     },
   };
 
-  rememberTimestampText(timestamp, rawText);
   return timestamp;
+}
+
+const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
+
+/**
+ * Compute the weekday label for a date, or `undefined` when the components
+ * do not form a valid calendar date (e.g. `2026-02-30`). Validating avoids
+ * `Date.UTC` silently rolling invalid values over into the next month.
+ */
+function computeWeekday(year: number, month: number, day: number): string | undefined {
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== month - 1 ||
+    date.getUTCDate() !== day
+  ) {
+    return undefined;
+  }
+
+  return WEEKDAY_LABELS[date.getUTCDay()];
+}
+
+function isWeekdayToken(token: string): boolean {
+  return /^(Sun|Mon|Tue|Wed|Thu|Fri|Sat)$/i.test(token);
 }
 
 function isRepeaterToken(token: string): boolean {
@@ -1155,8 +1219,17 @@ function findLastMatchingIndex(
   return -1;
 }
 
-function isInlineDelimiter(character: string): boolean {
-  return character === "*" || character === "/" || character === "_" || character === "+" || character === "=" || character === "~";
+function isInlineDelimiter(
+  character: string,
+): character is keyof typeof EMPHASIS_MARKER_TO_TYPE {
+  return (
+    character === "*" ||
+    character === "/" ||
+    character === "_" ||
+    character === "+" ||
+    character === "=" ||
+    character === "~"
+  );
 }
 
 interface ParsedLink {

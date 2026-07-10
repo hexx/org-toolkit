@@ -3,15 +3,20 @@
  * Run the CLI with:
  *
  * ```bash
- * npx tsx src/cli.ts path/to/file.org
- * npx ts-node src/cli.ts path/to/file.org
- * npx tsx src/cli.ts --roundtrip path/to/file.org
- * npx tsx src/cli.ts --markdown path/to/file.org
+ * npx org-toolkit path/to/file.org
+ * npx org-toolkit --format path/to/file.org
+ * npx org-toolkit --format --write path/to/file.org
+ * npx org-toolkit --markdown path/to/file.org
+ * npx org-toolkit --html path/to/file.org
+ * npx org-toolkit --roundtrip path/to/file.org
+ * npx org-toolkit --agenda ./my-notes
  * ```
  */
 import { readFile, stat } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
-import { Parser } from "./parser.js";
+import { fileURLToPath } from "node:url";
+import { parseArgs } from "node:util";
+import { parse } from "./parser.js";
 import { OrgParseError } from "./errors.js";
 import { runAgenda } from "./agenda.js";
 import { formatFiles } from "./file-system.js";
@@ -20,6 +25,16 @@ import { toMarkdown } from "./exporters/markdown.js";
 import { stringify } from "./stringifier.js";
 
 const USAGE = "Usage: tsx src/cli.ts [--agenda|--format|--html|--markdown|--roundtrip] <path|glob>";
+
+interface CliOptions {
+  readonly agenda: boolean;
+  readonly format: boolean;
+  readonly write: boolean;
+  readonly sources: ReadonlyArray<string>;
+  readonly html: boolean;
+  readonly markdown: boolean;
+  readonly roundtrip: boolean;
+}
 
 /**
  * Execute the CLI and return an exit code.
@@ -31,12 +46,11 @@ const USAGE = "Usage: tsx src/cli.ts [--agenda|--format|--html|--markdown|--roun
  */
 export async function main(argv: ReadonlyArray<string> = process.argv.slice(2)): Promise<number> {
   const options = parseCliArgs(argv);
-  if (options.showUsage) {
+  if (options === null) {
     console.log(USAGE);
-    return options.filePath === undefined ? 1 : 0;
+    return 1;
   }
 
-  const filePath = options.filePath;
   if (options.agenda) {
     const output = await runAgenda(options.sources, {
       cwd: await resolveAgendaCwd(options.sources),
@@ -57,14 +71,15 @@ export async function main(argv: ReadonlyArray<string> = process.argv.slice(2)):
     return 0;
   }
 
-  if (filePath === undefined) {
+  const file = options.sources[0];
+  if (file === undefined) {
     console.log(USAGE);
     return 1;
   }
 
   try {
-    const source = await readFile(filePath, "utf8");
-    const ast = Parser.parse(source);
+    const source = await readFile(file, "utf8");
+    const ast = parse(source);
     if (options.html) {
       console.log(toHtml(ast));
     } else if (options.markdown) {
@@ -81,97 +96,49 @@ export async function main(argv: ReadonlyArray<string> = process.argv.slice(2)):
   }
 }
 
-interface CliOptions {
-  readonly agenda: boolean;
-  readonly format: boolean;
-  readonly write: boolean;
-  readonly sources: ReadonlyArray<string>;
-  readonly filePath: string | undefined;
-  readonly html: boolean;
-  readonly markdown: boolean;
-  readonly roundtrip: boolean;
-  readonly showUsage: boolean;
-}
-
-function parseCliArgs(argv: ReadonlyArray<string>): CliOptions {
-  let agenda = false;
-  let format = false;
-  let html = false;
-  let markdown = false;
-  let roundtrip = false;
-  let write = false;
-  let filePath: string | undefined;
-  const sources: string[] = [];
-  let showUsage = false;
-
-  for (const arg of argv) {
-    if (arg === "--agenda") {
-      agenda = true;
-      continue;
-    }
-
-    if (arg === "--format") {
-      format = true;
-      continue;
-    }
-
-    if (arg === "--write") {
-      write = true;
-      continue;
-    }
-
-    if (arg === "--html") {
-      html = true;
-      continue;
-    }
-
-    if (arg === "--markdown") {
-      markdown = true;
-      continue;
-    }
-
-    if (arg === "--roundtrip") {
-      roundtrip = true;
-      continue;
-    }
-
-    if (arg === "--help" || arg === "-h") {
-      showUsage = true;
-      continue;
-    }
-
-    if (arg.startsWith("-")) {
-      continue;
-    }
-
-    sources.push(arg);
-    if (filePath === undefined) {
-      filePath = arg;
-    }
+function parseCliArgs(argv: ReadonlyArray<string>): CliOptions | null {
+  let parsed;
+  try {
+    parsed = parseArgs({
+      args: argv,
+      options: {
+        agenda: { type: "boolean", default: false },
+        format: { type: "boolean", default: false },
+        write: { type: "boolean", default: false },
+        html: { type: "boolean", default: false },
+        markdown: { type: "boolean", default: false },
+        roundtrip: { type: "boolean", default: false },
+        help: { type: "boolean", short: "h", default: false },
+      },
+      allowPositionals: true,
+      strict: true,
+    });
+  } catch {
+    return null;
   }
 
-  if (write && !format) {
-    showUsage = true;
-  }
+  const { values, positionals } = parsed;
+  const commandCount = [values.agenda, values.format, values.html, values.markdown, values.roundtrip].filter(
+    Boolean,
+  ).length;
 
-  if ((agenda || format) && sources.length === 0) {
-    showUsage = true;
-  }
-
-  if (!agenda && !format && filePath === undefined) {
-    showUsage = true;
+  if (
+    values.help ||
+    commandCount > 1 ||
+    (values.write && !values.format) ||
+    positionals.length === 0
+  ) {
+    return null;
   }
 
   return {
-    agenda,
-    format,
-    write,
-    sources,
-    filePath,
-    html,
-    markdown,
-    roundtrip,
-    showUsage,
+    agenda: values.agenda,
+    format: values.format,
+    write: values.write,
+    sources: positionals,
+    html: values.html,
+    markdown: values.markdown,
+    roundtrip: values.roundtrip,
   };
 }
 
@@ -239,11 +206,20 @@ function isDirectInvocation(): boolean {
     return false;
   }
 
-  return /[\\/](cli\.(?:ts|js|cjs))$/.test(entryPoint);
+  try {
+    return fileURLToPath(import.meta.url) === resolve(entryPoint);
+  } catch {
+    return /[\\/](cli\.(?:ts|js|cjs))$/.test(entryPoint);
+  }
 }
 
 if (isDirectInvocation()) {
-  void main().then((exitCode) => {
-    process.exit(exitCode);
-  });
+  void main()
+    .then((exitCode) => {
+      process.exit(exitCode);
+    })
+    .catch((error: unknown) => {
+      reportError(error);
+      process.exit(1);
+    });
 }
