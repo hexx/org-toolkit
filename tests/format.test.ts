@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { format, formatFiles } from "../src/format.js";
+import { format } from "../src/format.js";
+import { formatFiles } from "../src/file-system.js";
 
 const TAG_COLUMN = 77;
 

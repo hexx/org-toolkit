@@ -195,6 +195,20 @@ npx org-toolkit --agenda ./my-notes
 npx org-toolkit --agenda "docs/**/*.org"
 ```
 
+### Node.js file-system helpers
+
+`parse`, `format`, `stringify`, and the exporters are browser/Worker-safe and
+importable from the main `org-toolkit` entry. File and glob helpers
+(`formatFiles`, `resolveOrgFiles`) use `node:fs` and `node:path`, so they live
+in a dedicated subpath to keep Node built-ins out of browser bundles:
+
+```ts
+import { formatFiles } from "org-toolkit/file-system";
+
+// Resolve and format every org file matched by a glob:
+await formatFiles(["docs/**/*.org"], { write: true });
+```
+
 ### Web playground
 
 ```bash

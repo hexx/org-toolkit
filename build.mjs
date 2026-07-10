@@ -1,7 +1,7 @@
 import { rmSync } from "node:fs";
 import { build } from "esbuild";
 
-const entryPoints = ["src/index.ts", "src/cli.ts"];
+const entryPoints = ["src/index.ts", "src/file-system.ts", "src/cli.ts"];
 
 const common = {
   entryPoints,

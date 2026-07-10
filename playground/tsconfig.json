@@ -7,7 +7,7 @@
     "baseUrl": ".",
     "paths": {
       "org-toolkit": [
-        "../src/browser.ts"
+        "../src/index.ts"
       ]
     },
     "strict": true,
