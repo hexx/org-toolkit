@@ -296,20 +296,16 @@ function collectLineEntries(text: string): ReadonlyArray<LineEntry> {
 }
 
 function parseMetadataLine(line: LineEntry): DocumentMetadata {
-  const match = line.text.match(/^#\+([A-Za-z_]+):[ \t]*(.*)$/i);
-  if (match === null) {
-    throw new OrgParseError("Invalid metadata line", line.position.start);
-  }
-
-  const key = match[1];
-  if (key === undefined) {
-    throw new OrgParseError("Invalid metadata line", line.position.start);
-  }
+  // Only reached after `isMetadataLine` matched, which uses the same prefix
+  // pattern, so the regex below always matches and the key capture is present.
+  const match = line.text.match(/^#\+([A-Za-z_]+):[ \t]*(.*)$/i)!;
+  const key = match[1]!;
+  const value = match[2] ?? "";
 
   return {
     type: "document-metadata",
     key: key.toUpperCase(),
-    value: (match[2] ?? "").trim(),
+    value: value.trim(),
     position: line.position,
   };
 }
