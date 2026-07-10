@@ -32,6 +32,34 @@ describe("format", () => {
     );
   });
 
+  it("returns concatenated output without writing when write is false", async () => {
+    const root = await mkdtemp(join(tmpdir(), "org-toolkit-format-"));
+    const dirty = [
+      "* TODO Write docs :work:urgent:",
+      "",
+      "|Name|Age|",
+      "|---+---|",
+      "|Alice|24|",
+    ].join("\n");
+    await writeFile(join(root, "one.org"), dirty, "utf8");
+    await writeFile(join(root, "two.org"), dirty, "utf8");
+
+    const heading = formatHeading("* TODO Write docs", ":work:urgent:");
+    const expected = [
+      heading,
+      "",
+      "| Name  | Age |",
+      "|-----+---|",
+      "| Alice | 24  |",
+    ].join("\n");
+
+    const output = await formatFiles(["**/*.org"], { cwd: root, write: false });
+    expect(output).toBe([expected, expected].join("\n\n"));
+    // Source files must remain untouched in read-only mode.
+    expect(await readFile(join(root, "one.org"), "utf8")).toBe(dirty);
+    expect(await readFile(join(root, "two.org"), "utf8")).toBe(dirty);
+  });
+
   it("formats multiple files and writes them in place", async () => {
     const root = await mkdtemp(join(tmpdir(), "org-toolkit-format-"));
     const dirty = [
